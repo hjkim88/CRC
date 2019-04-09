@@ -40,10 +40,17 @@ checkOverlap <- function(clinInfoPath1 = "//isilon.c2b2.columbia.edu/ifs/archive
   clinInfo2 <- read.table(file = clinInfoPath2, header = TRUE, sep = "\t",
                           stringsAsFactors = FALSE, check.names = FALSE)
   
-  
-  
-  
-  
+  ### draw the venn diagram
+  v <- venn.diagram(list(clinInfo1$`Sample ID`, clinInfo2$`Sample ID`),
+                    category.names = c("PanCancer Atlas", "Provisional"),
+                    cat.cex = 1.0, cex = 1.5,
+                    filename = NULL)
+  png(paste0(outputDir, "sample_overlap.png"),
+      width = 1200, height = 1000, res = 180)
+  grid.arrange(gTree(children=v),
+               top=paste0("Sample Overlap of between PanCancer_Atlas & Provisional"),
+               bottom="")
+  dev.off()
   
 }
 
