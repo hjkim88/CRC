@@ -53,5 +53,3 @@ checkOverlap <- function(clinInfoPath1 = "//isilon.c2b2.columbia.edu/ifs/archive
   dev.off()
   
 }
-
-
