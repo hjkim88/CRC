@@ -74,15 +74,15 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
   
   ### add group info (MSI/MSS - Young/Old)
   clinicalInfo_640 <- data.frame(clinicalInfo_640,
-                                 Group1=NA,
+                                 MSI_AGE_Status=NA,
                                  stringsAsFactors = FALSE, check.names = FALSE)
-  clinicalInfo_640$Group1[intersect(which(clinicalInfo_640$MSI == "MSI"),
+  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSI"),
                                     which(clinicalInfo_640$`Diagnosis Age` < 50))] <- "MSI_Young"
-  clinicalInfo_640$Group1[intersect(which(clinicalInfo_640$MSI == "MSI"),
+  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSI"),
                                     which(clinicalInfo_640$`Diagnosis Age` >= 50))] <- "MSI_Old"
-  clinicalInfo_640$Group1[intersect(which(clinicalInfo_640$MSI == "MSS"),
+  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSS"),
                                     which(clinicalInfo_640$`Diagnosis Age` < 50))] <- "MSS_Young"
-  clinicalInfo_640$Group1[intersect(which(clinicalInfo_640$MSI == "MSS"),
+  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSS"),
                                     which(clinicalInfo_640$`Diagnosis Age` >= 50))] <- "MSS_Old"
   
   
@@ -104,7 +104,7 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
                              "Patient Vital Status",
                              "Patient Weight",
                              "MSI",
-                             "Group1")]
+                             "MSI_AGE_Status")]
   
   ### change the colnames of the bsdf
   colnames(bsdf) <- c("Sample_ID",
@@ -122,22 +122,13 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
                       "Status",
                       "Weight",
                       "MSI",
-                      "Group1")
+                      "MSI_AGE_Status")
   
   ### make NA to "NA"
   bsdf[is.na(bsdf)] <- "NA"
   
-  ### draw a beeswarm plot
-  ggplot(bsdf, aes(x=MSI, y=Age)) +
-    ggtitle(paste("")) +
-    theme_classic(base_size = 16) +
-    geom_boxplot() +
-    geom_beeswarm(aes(color=Tumor_Stage)) +
-    stat_compare_means()
-  ggsave(filename = paste0(""), width = 12, height = 10)
-  
   ### set parameters for the circular plot (stage)
-  group <- unique(bsdf$Group1)
+  group <- unique(bsdf$MSI_AGE_Status)
   separator_size <- 3
   tumor_stage_list <- unique(bsdf$Tumor_Stage)[order(unique(bsdf$Tumor_Stage))]
   
@@ -148,7 +139,7 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
     cdf$Stage[((i-1)*(length(tumor_stage_list)+separator_size)+1):((i-1)*(length(tumor_stage_list)+separator_size)+length(tumor_stage_list))] <- tumor_stage_list
     cdf$Group[((i-1)*(length(tumor_stage_list)+separator_size)+1):((i-1)*(length(tumor_stage_list)+separator_size)+length(tumor_stage_list)+separator_size)] <- group[i]
     for(j in 1:length(tumor_stage_list)) {
-      cdf$Number[(i-1)*(length(tumor_stage_list)+separator_size)+j] <- length(intersect(which(bsdf$Group1 == group[i]), which(bsdf$Tumor_Stage == tumor_stage_list[j])))
+      cdf$Number[(i-1)*(length(tumor_stage_list)+separator_size)+j] <- length(intersect(which(bsdf$MSI_AGE_Status == group[i]), which(bsdf$Tumor_Stage == tumor_stage_list[j])))
     }
   }
   cdf$ID <- 1:nrow(cdf)
@@ -246,21 +237,24 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
     labs(x = NULL, y = NULL, title = group[4])
   
   ### arrange the plots and print out
-  g <- arrangeGrob(p1, p2, p3, p4, p5, layout_matrix = rbind(c(1, 1, 5, 2), c(1, 1, 4, 3)),
+  g1 <- arrangeGrob(p1, p2, p3, p4, p5, layout_matrix = rbind(c(1, 1, 5, 2), c(1, 1, 4, 3)),
                    top = "Stage Differences in Various MSI/Age Status")
-  ggsave(file = paste0(outputDir, "demo_msi_age_stage.png"), g, width = 20, height = 10)
+  ggsave(file = paste0(outputDir, "demo_msi_age_stage.png"), g1, width = 20, height = 12)
   
   ### survival plot
   bsdf$Survival <- as.numeric(bsdf$Survival)
   bsdf$Status[bsdf$Status == "Alive"] <- 0
   bsdf$Status[bsdf$Status == "Dead"] <- 1
   bsdf$Status <- as.numeric(bsdf$Status)
-  fit <- survfit(Surv(Survival, Status) ~ Group1, data = bsdf)
+  fit <- survfit(Surv(Survival, Status) ~ MSI_AGE_Status, data = bsdf)
   
   p6 <- ggsurvplot(
     fit,
     data = bsdf,
+    title = "Survival Differences in Various MSI/Age Status",
+    legend.labs = levels(as.factor(bsdf$MSI_AGE_Status)),
     risk.table = TRUE,
+    tables.col = "strata",
     pval = TRUE,
     conf.int = TRUE,
     xlab = "Time in Months",
@@ -273,17 +267,22 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
     ncensor.plot.height = 0.25,
     conf.int.style = "ribbon"
   )
+  p6$table <- p6$table + theme(legend.position = "none")
+  p6$ncensor.plot <- p6$ncensor.plot + theme(legend.position = "none")
   
+  ### beeswarm plot
+  p7 <- ggplot(bsdf, aes(x=MSI_AGE_Status, y=Survival)) +
+    theme_classic(base_size = 16) +
+    geom_boxplot() +
+    geom_beeswarm(aes(color=MSI_AGE_Status), na.rm = TRUE) +
+    stat_compare_means() +
+    labs(x = "", y = "Survival (Months)") +
+    theme(legend.position="top")
   
-  
-  
-  
+  ### arrange the plots and print out
+  g2 <- arrangeGrob(p6$plot, p6$table, p6$ncensor.plot, p7,
+                    layout_matrix = rbind(c(1, 4), c(1, 4), c(1, 4), c(2, 4), c(3, 4)),
+                    top = "Survival Differences in Various MSI/Age Status")
+  ggsave(file = paste0(outputDir, "demo_msi_age_survival.png"), g2, width = 20, height = 12)
   
 }
-
-
-
-
-
-
-
