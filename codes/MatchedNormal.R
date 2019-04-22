@@ -16,7 +16,7 @@
 #               > source("The_directory_of_MatchedNormal.R/MatchedNormal.R")
 #               > identifyNormals(clinInfoPath = "./data/coadread_tcga_clinical_data.tsv",
 #                                 wxsInfoPath = "./data/TCGA_COAD_READ_WXS_Files_Info.tsv",
-#                                 outputFilePath = "./results/WXS_matched_tumor_normal_sample_info.txt")
+#                                 outputFilePath = "./data/MSIsensor/WXS_matched_tumor_normal_sample_info.txt")
 ###
 
 identifyNormals <- function(clinInfoPath = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data.tsv",
@@ -57,16 +57,18 @@ identifyNormals <- function(clinInfoPath = "//isilon.c2b2.columbia.edu/ifs/archi
               paste(wxsInfo_interest_normal$`Sample ID`[b], collapse = ","),
               paste(wxsInfo_interest_cancer$`Sample Type`[a], collapse = ","),
               paste(wxsInfo_interest_normal$`Sample Type`[b], collapse = ","),
+              paste(wxsInfo_interest_cancer$`File ID`[a], collapse = ","),
+              paste(wxsInfo_interest_normal$`File ID`[b], collapse = ","),
               paste(wxsInfo_interest_cancer$`File Name`[a], collapse = ","),
               paste(wxsInfo_interest_normal$`File Name`[b], collapse = ","))
     matched_info <- rbind(matched_info, temp)
   }
   colnames(matched_info) <- c("Case_ID", "Project_ID", "Tumor_Sample_ID", "Normal_Sample_ID",
-                              "Tumor_Sample_Type", "Normal_Sample_Type", "Tumor_File_Name", "Normal_File_Name")
+                              "Tumor_Sample_Type", "Normal_Sample_Type",
+                              "Tumor_File_ID", "Normal_File_ID",
+                              "Tumor_File_Name", "Normal_File_Name")
   
   ### write out the result
   write.table(matched_info, file = outputFilePath, sep = "\t", row.names = FALSE)
   
 }
-
-
