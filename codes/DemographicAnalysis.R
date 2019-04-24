@@ -12,15 +12,13 @@
 #
 #   Example
 #               > source("The_directory_of_DemographicAnalysis.R/DemographicAnalysis.R")
-#               > demoAnalysis(clinInfoPath_coad = "./data/nationwidechildrens.org_clinical_patient_coad.txt",
-#                              clinInfoPath_read = "./data/nationwidechildrens.org_clinical_patient_read.txt",
-#                              clinInfoPath_640 = "./data/coadread_tcga_clinical_data.tsv",
+#               > demoAnalysis(clinInfoPath_640 = "./data/coadread_tcga_clinical_data.tsv",
+#                              msiInfoPath = "./data/nationwidechildrens.org_auxiliary_coad_read.txt",
 #                              outputDir="./results/demographic/")
 ###
 
-demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/nationwidechildrens.org_clinical_patient_coad.txt",
-                         clinInfoPath_read = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/nationwidechildrens.org_clinical_patient_read.txt",
-                         clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data.tsv",
+demoAnalysis <- function(clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data.tsv",
+                         msiInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/nationwidechildrens.org_auxiliary_coad_read.txt",
                          outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/demographic/") {
   
   ### load necessary libraries
@@ -54,32 +52,31 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
   }
   
   ### load the data
-  clinicalInfo_COAD <- read.table(file = clinInfoPath_coad,
-                                  header = TRUE, sep = "\t",stringsAsFactors = FALSE, check.names = FALSE)
-  clinicalInfo_COAD <- clinicalInfo_COAD[-c(1,2),]
-  clinicalInfo_READ <- read.table(file = clinInfoPath_read,
-                                  header = TRUE, sep = "\t",stringsAsFactors = FALSE, check.names = FALSE)
-  clinicalInfo_READ <- clinicalInfo_READ[-c(1,2),]
   clinicalInfo_640 <- read.table(file = clinInfoPath_640, header = TRUE, sep = "\t",
                                  stringsAsFactors = FALSE, check.names = FALSE)
+  if(length(which(duplicated(clinicalInfo_640$`Patient ID`))) > 0) {
+    clinicalInfo_640 <- clinicalInfo_640[-which(duplicated(clinicalInfo_640$`Patient ID`)),]
+  }
+  rownames(clinicalInfo_640) <- clinicalInfo_640$`Patient ID`
+  msiInfo <- read.table(file = msiInfoPath, sep = "\t",
+                        header = TRUE, row.names = 1,
+                        stringsAsFactors = FALSE, check.names = FALSE)
   
   ### add msi status
   clinicalInfo_640 <- data.frame(clinicalInfo_640,
                                  MSI=NA,
                                  stringsAsFactors = FALSE, check.names = FALSE)
-  msi_grp <- sample(nrow(clinicalInfo_640), round(nrow(clinicalInfo_640)/2))
-  mss_grp <- setdiff(c(1:nrow(clinicalInfo_640)), msi_grp)
-  clinicalInfo_640$MSI[msi_grp] <- "MSI"
-  clinicalInfo_640$MSI[mss_grp] <- "MSS"
+  common_cases <- intersect(rownames(clinicalInfo_640), rownames(msiInfo))
+  clinicalInfo_640[common_cases, "MSI"] <- msiInfo[common_cases, "mononucleotide_and_dinucleotide_marker_panel_analysis_status"]
   
   ### add group info (MSI/MSS - Young/Old)
   clinicalInfo_640 <- data.frame(clinicalInfo_640,
                                  MSI_AGE_Status=NA,
                                  stringsAsFactors = FALSE, check.names = FALSE)
-  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSI"),
-                                    which(clinicalInfo_640$`Diagnosis Age` < 50))] <- "MSI_Young"
-  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSI"),
-                                    which(clinicalInfo_640$`Diagnosis Age` >= 50))] <- "MSI_Old"
+  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSI-H"),
+                                            which(clinicalInfo_640$`Diagnosis Age` < 50))] <- "MSI-H_Young"
+  clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSI-H"),
+                                    which(clinicalInfo_640$`Diagnosis Age` >= 50))] <- "MSI-H_Old"
   clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSS"),
                                     which(clinicalInfo_640$`Diagnosis Age` < 50))] <- "MSS_Young"
   clinicalInfo_640$MSI_AGE_Status[intersect(which(clinicalInfo_640$MSI == "MSS"),
@@ -123,6 +120,11 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
                       "Weight",
                       "MSI",
                       "MSI_AGE_Status")
+  
+  ### remove rows with MSI == NA
+  if(length(which(is.na(bsdf$MSI_AGE_Status))) > 0) {
+    bsdf <- bsdf[-which(is.na(bsdf$MSI_AGE_Status)),]
+  }
   
   ### make NA to "NA"
   bsdf[is.na(bsdf)] <- "NA"
@@ -180,7 +182,7 @@ demoAnalysis <- function(clinInfoPath_coad = "//isilon.c2b2.columbia.edu/ifs/arc
     annotate("text", x = rep(base_data$end[3]+separator_size,4), y = quant[2:5], label = as.character(quant[2:5]) , color = "grey", size = 4 , angle = 0, fontface = "bold", hjust = 1) +
     annotate("text", x = rep(base_data$end[4]+separator_size,4), y = quant[2:5], label = as.character(quant[2:5]) , color = "grey", size = 4 , angle = 0, fontface = "bold", hjust = 1) +
     geom_bar(aes(x = as.factor(ID), y = Number, fill = Group), stat = "identity", alpha = 0.5) +
-    ylim(-100,120) +
+    ylim(-1.1*quant[5],1.1*quant[5]) +
     theme_minimal() +
     theme(
       legend.position = "none",
