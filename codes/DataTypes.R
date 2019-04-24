@@ -19,7 +19,7 @@
 ###
 
 identifyDataTypes <- function(clinInfoPath = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data.tsv",
-                              tcgaFileInfoPath = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data///isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/TCGA_COAD_READ_All_Files_Info.txt") {
+                              tcgaFileInfoPath = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/TCGA_COAD_READ_All_Files_Info.txt") {
   
   ### load the data
   clinInfo <- read.table(file = clinInfoPath, header = TRUE, sep = "\t",
