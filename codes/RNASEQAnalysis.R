@@ -37,6 +37,12 @@ rnaseq_parvathi <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/s
     BiocManager::install("org.Hs.eg.db", version = "3.8")
     require(org.Hs.eg.db, quietly = TRUE)
   }
+  if(!require(limma, quietly = TRUE)) {
+    if(!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("limma", version = "3.8")
+    require(limma, quietly = TRUE)
+  }
   
   ### load the data
   load(rCntPath)
@@ -258,9 +264,9 @@ rnaseq_parvathi <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/s
       }  
     } else {
       ###
-      if (length(unique(as.character(groups))) < 6)
+      if(length(unique(as.character(groups))) < 6)
         colors = c("black", "red", "blue", "magenta", "green")[1:length(unique(as.character(groups)))]
-      else{
+      else {
         require(randomcoloR)
         colors = distinctColorPalette(length(unique(as.character(groups))))
         # colors = rainbow(length(unique(as.character(groups))))
@@ -514,20 +520,23 @@ rnaseq_parvathi <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/s
   
   
   ### MSI-H: Young vs Old
+  
+  ### extract raw counts of samples of our interest and run DE analysis
   rCnt <- htseq_raw_counts[,which(tcga_sample_info$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$MSI_AGE_Status == "MSI-H_Young"),which(clinicalInfo_640$MSI_AGE_Status == "MSI-H_Old"))])]
   grp <- clinicalInfo_640[tcga_sample_info[colnames(rCnt),"Case ID"],"MSI_AGE_Status"]
   grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
   deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
                                    exp_class = "Young", ctrl_class = "Old",
                                    bat_eff = NULL, thresh = 1)
+  
+  ### annotate the genes with gene symbols
   entrez_id <- ensembl2eg[sapply(rownames(deresult), function(x) strsplit(x, ".", fixed = TRUE)[[1]][1])]
   deresult <- data.frame(Ensembl_ID=rownames(deresult),
                          Gene_Symbol=eg2gs[entrez_id], deresult,
                          stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
   fileName <- "msi-h_young_vs_old"
-  mdsPlot(normalizeRNASEQwithVST(rCnt), groups = grp, save = TRUE, pch = 19,
-          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
-          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
   write.xlsx2(deresult, file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
   pathresult <- pathwayAnalysis_CP(geneList = entrez_id[which(deresult$padj < padj_thres)], org = "human", database = "GO",
@@ -535,22 +544,116 @@ rnaseq_parvathi <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/s
                                    pv_threshold = padj_thres, dir = outputDir)
   write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   
+  ### QC - MDS plots
+  normCnt <- normalizeRNASEQwithVST(rCnt)
+  ### original MDS
+  mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
+          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
+          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
+  
+  ### select the top genes for MDS using limma
+  ### age
+  png(paste0(outputDir, "mdsplot2_", fileName, "_age.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_AGE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### race
+  png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_RACE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### gender
+  png(paste0(outputDir, "mdsplot2_", fileName, "_gender.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"Sex"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### stage
+  png(paste0(outputDir, "mdsplot2_", fileName, "_stage.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"American Joint Committee on Cancer Tumor Stage Code"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  
   
   ### MSS: Young vs Old
+  
+  ### extract raw counts of samples of our interest and run DE analysis
   rCnt <- htseq_raw_counts[,which(tcga_sample_info$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$MSI_AGE_Status == "MSS_Young"),which(clinicalInfo_640$MSI_AGE_Status == "MSS_Old"))])]
   grp <- clinicalInfo_640[tcga_sample_info[colnames(rCnt),"Case ID"],"MSI_AGE_Status"]
   grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
   deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
                                    exp_class = "Young", ctrl_class = "Old",
                                    bat_eff = NULL, thresh = 1)
+  
+  ### annotate the genes with gene symbols
   entrez_id <- ensembl2eg[sapply(rownames(deresult), function(x) strsplit(x, ".", fixed = TRUE)[[1]][1])]
   deresult <- data.frame(Ensembl_ID=rownames(deresult),
                          Gene_Symbol=eg2gs[entrez_id], deresult,
                          stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
   fileName <- "mss_young_vs_old"
-  mdsPlot(normalizeRNASEQwithVST(rCnt), groups = grp, save = TRUE, pch = 19,
-          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
-          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
   write.xlsx2(deresult, file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
   pathresult <- pathwayAnalysis_CP(geneList = entrez_id[which(deresult$padj < padj_thres)], org = "human", database = "GO",
@@ -558,22 +661,116 @@ rnaseq_parvathi <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/s
                                    pv_threshold = padj_thres, dir = outputDir)
   write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   
+  ### QC - MDS plots
+  normCnt <- normalizeRNASEQwithVST(rCnt)
+  ### original MDS
+  mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
+          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
+          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
+  
+  ### select the top genes for MDS using limma
+  ### age
+  png(paste0(outputDir, "mdsplot2_", fileName, "_age.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_AGE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### race
+  png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_RACE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### gender
+  png(paste0(outputDir, "mdsplot2_", fileName, "_gender.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"Sex"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### stage
+  png(paste0(outputDir, "mdsplot2_", fileName, "_stage.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"American Joint Committee on Cancer Tumor Stage Code"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  
   
   ### MSI-H: AA vs CC
+  
+  ### extract raw counts of samples of our interest and run DE analysis
   rCnt <- htseq_raw_counts[,which(tcga_sample_info$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$MSI_RACE_Status == "MSI-H_AA"),which(clinicalInfo_640$MSI_RACE_Status == "MSI-H_CC"))])]
   grp <- clinicalInfo_640[tcga_sample_info[colnames(rCnt),"Case ID"],"MSI_RACE_Status"]
   grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
   deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
                                    exp_class = "AA", ctrl_class = "CC",
                                    bat_eff = NULL, thresh = 1)
+  
+  ### annotate the genes with gene symbols
   entrez_id <- ensembl2eg[sapply(rownames(deresult), function(x) strsplit(x, ".", fixed = TRUE)[[1]][1])]
   deresult <- data.frame(Ensembl_ID=rownames(deresult),
                          Gene_Symbol=eg2gs[entrez_id], deresult,
                          stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
   fileName <- "msi-h_AA_vs_CC"
-  mdsPlot(normalizeRNASEQwithVST(rCnt), groups = grp, save = TRUE, pch = 19,
-          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
-          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
   write.xlsx2(deresult, file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
   pathresult <- pathwayAnalysis_CP(geneList = entrez_id[which(deresult$padj < padj_thres)], org = "human", database = "GO",
@@ -581,27 +778,212 @@ rnaseq_parvathi <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/s
                                    pv_threshold = padj_thres, dir = outputDir)
   write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   
+  ### QC - MDS plots
+  normCnt <- normalizeRNASEQwithVST(rCnt)
+  ### original MDS
+  mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
+          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
+          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
+  
+  ### select the top genes for MDS using limma
+  ### age
+  png(paste0(outputDir, "mdsplot2_", fileName, "_age.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_AGE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### race
+  png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_RACE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### gender
+  png(paste0(outputDir, "mdsplot2_", fileName, "_gender.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"Sex"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### stage
+  png(paste0(outputDir, "mdsplot2_", fileName, "_stage.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"American Joint Committee on Cancer Tumor Stage Code"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  
   
   ### MSS: AA vs CC
+  
+  ### extract raw counts of samples of our interest and run DE analysis
   rCnt <- htseq_raw_counts[,which(tcga_sample_info$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$MSI_RACE_Status == "MSS_AA"),which(clinicalInfo_640$MSI_RACE_Status == "MSS_CC"))])]
   grp <- clinicalInfo_640[tcga_sample_info[colnames(rCnt),"Case ID"],"MSI_RACE_Status"]
   grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
   deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
                                    exp_class = "AA", ctrl_class = "CC",
                                    bat_eff = NULL, thresh = 1)
+  
+  ### annotate the genes with gene symbols
   entrez_id <- ensembl2eg[sapply(rownames(deresult), function(x) strsplit(x, ".", fixed = TRUE)[[1]][1])]
   deresult <- data.frame(Ensembl_ID=rownames(deresult),
                          Gene_Symbol=eg2gs[entrez_id], deresult,
                          stringsAsFactors = FALSE, check.names = FALSE)
+  
+  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
   fileName <- "mss_AA_vs_CC"
-  mdsPlot(normalizeRNASEQwithVST(rCnt), groups = grp, save = TRUE, pch = 19,
-          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
-          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
   write.xlsx2(deresult, file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
   pathresult <- pathwayAnalysis_CP(geneList = entrez_id[which(deresult$padj < padj_thres)], org = "human", database = "GO",
                                    displayNum = 50, title = paste0("pathway_", fileName),
                                    pv_threshold = padj_thres, dir = outputDir)
   write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
+  
+  ### QC - MDS plots
+  normCnt <- normalizeRNASEQwithVST(rCnt)
+  ### original MDS
+  mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
+          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
+          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
+  
+  ### select the top genes for MDS using limma
+  ### age
+  png(paste0(outputDir, "mdsplot2_", fileName, "_age.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_AGE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### race
+  png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"MSI_RACE_Status"]
+  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### gender
+  png(paste0(outputDir, "mdsplot2_", fileName, "_gender.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"Sex"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
+  ### stage
+  png(paste0(outputDir, "mdsplot2_", fileName, "_stage.png"), width = 2000, height = 1000, res = 130)
+  par(mfrow=c(1,2))
+  grp <- clinicalInfo_640[tcga_sample_info[colnames(normCnt),"Case ID"],"American Joint Committee on Cancer Tumor Stage Code"]
+  if(length(which(is.na(grp))) > 0) {
+    grp[which(is.na(grp))] <- "NA"
+  }
+  colors = rainbow(length(unique(as.character(grp))))
+  names(colors) = unique(as.character(grp))
+  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  legend("topright", legend = unique(as.character(grp)),
+         col = colors[unique(as.character(grp))], pch = 19,
+         title = "Sample Groups", cex = 0.7)
+  dev.off()
   
 }
