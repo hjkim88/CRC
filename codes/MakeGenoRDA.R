@@ -99,7 +99,37 @@ make_genotype_rda <- function(genoPath="./data/genotyping/TCGA/",
   }
   
   ### get the sample info of the genotype data files from the TCGA metadata
-  tcga_meta <- fromJSON(file = metaDataPath)
+  temp <- fromJSON(file = metaDataPath)
+  tcga_meta <- data.frame(matrix(NA, length(temp), 3))
+  colnames(tcga_meta) <- c("Sample_ID", "Gender", "Ethnicity")
+  rownames(tcga_meta) <- sapply(temp, function(x) {
+    if(is.null(x$file_name)) {
+      return(NA)
+    } else {
+      return(x$file_name)
+    }
+  })
+  tcga_meta[,"Sample_ID"] <- sapply(temp, function(x) {
+    if(is.null(x$associated_entities[[1]]$entity_submitter_id)) {
+      return(NA)
+    } else {
+      return(x$associated_entities[[1]]$entity_submitter_id)
+    }
+  })
+  tcga_meta[,"Gender"] <- sapply(temp, function(x) {
+    if(is.null(x$cases[[1]]$demographic$gender)) {
+      return(NA)
+    } else {
+      return(x$cases[[1]]$demographic$gender)
+    }
+  })
+  tcga_meta[,"Ethnicity"] <- sapply(temp, function(x) {
+    if(is.null(x$cases[[1]]$demographic$race)) {
+      return(NA)
+    } else {
+      return(toupper(x$cases[[1]]$demographic$race))
+    }
+  })
   
   ### get the sample info of the reference data
   ref_meta <- read.table(file = refSampleDataPath, header = TRUE, sep = "\t",
@@ -114,6 +144,7 @@ make_genotype_rda <- function(genoPath="./data/genotyping/TCGA/",
   rm(refList2)
   rm(con)
   rm(rmv_obj)
+  rm(temp)
   gc()
   
   ### load the 1000 Genomes Project reference genotype data
@@ -149,9 +180,10 @@ make_genotype_rda <- function(genoPath="./data/genotyping/TCGA/",
     writeLines(paste(i, "/", length(f)))
     gc()
   }
-  colnames(combined_geno)[(length(ref_sample_ids)+1):ncol(combined_geno)] <- sapply(tcga_meta, function(x) {
-    return(x$associated_entities[[1]]$entity_submitter_id)
-  })
+  colnames(combined_geno)[(length(ref_sample_ids)+1):ncol(combined_geno)] <- tcga_meta[f,"Sample_ID"]
+  temp <- rownames(combined_geno)
+  combined_geno <- data.frame(lapply(combined_geno, as.numeric), stringsAsFactors = FALSE, check.names = FALSE)
+  rownames(combined_geno) <- temp
   
   ### create sample info for the combined data
   sample_info <- data.frame(matrix("", ncol(combined_geno), 5), stringsAsFactors = FALSE, check.names = FALSE)
@@ -162,9 +194,7 @@ make_genotype_rda <- function(genoPath="./data/genotyping/TCGA/",
   sample_info[1:length(ref_sample_ids),"Source"] <- "1000 Genomes Project"
   sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"Source"] <- "TCGA"
   sample_info[1:length(ref_sample_ids),"File_Name"] <- "ftp://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/ALL.chr*.phase3_shapeit2_mvncall_integrated_v5a.20130502.genotypes.vcf.gz"
-  sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"File_Name"] <- sapply(tcga_meta, function(x) {
-    return(x$file_name)
-  })
+  sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"File_Name"] <- rownames(tcga_meta[f,])
   sample_info[,"Sample_ID"] <- colnames(combined_geno)
   sample_info[1:length(ref_sample_ids),"Gender"] <- sapply(ref_meta[ref_sample_ids,"Gender"], function(x) {
     if(x == 1) {
@@ -175,13 +205,9 @@ make_genotype_rda <- function(genoPath="./data/genotyping/TCGA/",
       return(NA)
     }
   })
-  sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"Gender"] <- sapply(tcga_meta, function(x) {
-    return(x$cases[[1]]$demographic$gender)
-  })
+  sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"Gender"] <- tcga_meta[f,"Gender"]
   sample_info[1:length(ref_sample_ids),"Ethnicity"] <- ref_meta[ref_sample_ids,"Population"]
-  sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"Ethnicity"] <- sapply(tcga_meta, function(x) {
-    return(toupper(x$cases[[1]]$demographic$race))
-  })
+  sample_info[(length(ref_sample_ids)+1):nrow(sample_info),"Ethnicity"] <- tcga_meta[f,"Ethnicity"]
   
   ### set README function
   README <- function(){
