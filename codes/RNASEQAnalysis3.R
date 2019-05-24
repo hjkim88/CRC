@@ -847,126 +847,126 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
   dev.off()
   
   
-  ### AA vs CC regardless of MSI status
-  
-  ### BASED ON SELF-REPORTED RACE INFO
-  ### extract raw counts of samples of our interest and run DE analysis
-  rCnt <- raw_count_tcga_coad_read[,which(sample_info_tcga_coad_read$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$`Race Category` == "BLACK OR AFRICAN AMERICAN"),which(clinicalInfo_640$`Race Category` == "WHITE"))])]
-  grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(rCnt),"Case ID"],"Race Category"]
-  grp <- sapply(grp, function(x) {
-        if(x == "BLACK OR AFRICAN AMERICAN")
-          return("AA")
-        else if(x == "WHITE")
-          return("CC")
-        else
-          return(NA)
-      }, USE.NAMES = FALSE)
-  deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
-                                   exp_class = "AA", ctrl_class = "CC",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "AA_vs_CC"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  pathresult <- pathwayAnalysis_CP(geneList = gs2eg[rownames(deresult)[which(deresult$padj < padj_thres)]],
-                                   org = "human", database = "GO",
-                                   displayNum = 50, title = paste0("pathway_", fileName),
-                                   pv_threshold = padj_thres, dir = outputDir)
-  write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(rCnt)
-  ### original MDS
-  mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
-          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
-          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
-  
-  ### select the top genes for MDS using limma
-  ### race
-  png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(normCnt),"Case ID"],"MSI_RACE_Status2"]
-  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
-  if(length(which(is.na(grp))) > 0) {
-    grp[which(is.na(grp))] <- "NA"
-  }
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
-  
-  
-  ### BASED ON PREDICTED RACE INFO
-  ### extract raw counts of samples of our interest and run DE analysis
-  rCnt <- raw_count_tcga_coad_read[,which(sample_info_tcga_coad_read$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$Prediction_Filtered == "African"),which(clinicalInfo_640$Prediction_Filtered == "Caucasian"))])]
-  grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(rCnt),"Case ID"],"Prediction_Filtered"]
-  grp <- sapply(grp, function(x) {
-    if(x == "African")
-      return("AA")
-    else if(x == "Caucasian")
-      return("CC")
-    else
-      return(NA)
-  }, USE.NAMES = FALSE)
-  deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
-                                   exp_class = "AA", ctrl_class = "CC",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "AA_vs_CC_predicted"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  pathresult <- pathwayAnalysis_CP(geneList = gs2eg[rownames(deresult)[which(deresult$padj < padj_thres)]],
-                                   org = "human", database = "GO",
-                                   displayNum = 50, title = paste0("pathway_", fileName),
-                                   pv_threshold = padj_thres, dir = outputDir)
-  write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(rCnt)
-  ### original MDS
-  mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
-          main = fileName, xlab = "Dimension1", ylab = "Dimension2",
-          f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
-  
-  ### select the top genes for MDS using limma
-  ### race
-  png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(normCnt),"Case ID"],"MSI_RACE_Status2"]
-  grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
-  if(length(which(is.na(grp))) > 0) {
-    grp[which(is.na(grp))] <- "NA"
-  }
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
-  
-  
   ### The code lines below (that are commented out) are test cases with other TCGA datasets
   ### The produced results below are not included in the project
+  
+  # ### AA vs CC regardless of MSI status
+  # 
+  # ### BASED ON SELF-REPORTED RACE INFO
+  # ### extract raw counts of samples of our interest and run DE analysis
+  # rCnt <- raw_count_tcga_coad_read[,which(sample_info_tcga_coad_read$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$`Race Category` == "BLACK OR AFRICAN AMERICAN"),which(clinicalInfo_640$`Race Category` == "WHITE"))])]
+  # grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(rCnt),"Case ID"],"Race Category"]
+  # grp <- sapply(grp, function(x) {
+  #       if(x == "BLACK OR AFRICAN AMERICAN")
+  #         return("AA")
+  #       else if(x == "WHITE")
+  #         return("CC")
+  #       else
+  #         return(NA)
+  #     }, USE.NAMES = FALSE)
+  # deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
+  #                                  exp_class = "AA", ctrl_class = "CC",
+  #                                  bat_eff = NULL, thresh = 1)
+  # 
+  # ### write out the DE result table, draw a volcano plot, and perform pathway analysis
+  # fileName <- "AA_vs_CC"
+  # write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
+  #             file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
+  # volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
+  # pathresult <- pathwayAnalysis_CP(geneList = gs2eg[rownames(deresult)[which(deresult$padj < padj_thres)]],
+  #                                  org = "human", database = "GO",
+  #                                  displayNum = 50, title = paste0("pathway_", fileName),
+  #                                  pv_threshold = padj_thres, dir = outputDir)
+  # write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
+  # 
+  # ### QC - MDS plots
+  # normCnt <- normalizeRNASEQwithVST(rCnt)
+  # ### original MDS
+  # mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
+  #         main = fileName, xlab = "Dimension1", ylab = "Dimension2",
+  #         f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
+  # 
+  # ### select the top genes for MDS using limma
+  # ### race
+  # png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
+  # par(mfrow=c(1,2))
+  # grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(normCnt),"Case ID"],"MSI_RACE_Status2"]
+  # grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  # if(length(which(is.na(grp))) > 0) {
+  #   grp[which(is.na(grp))] <- "NA"
+  # }
+  # colors = rainbow(length(unique(as.character(grp))))
+  # names(colors) = unique(as.character(grp))
+  # plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+  #         xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  # legend("topright", legend = unique(as.character(grp)),
+  #        col = colors[unique(as.character(grp))], pch = 19,
+  #        title = "Sample Groups", cex = 0.7)
+  # plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+  #         xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  # legend("topright", legend = unique(as.character(grp)),
+  #        col = colors[unique(as.character(grp))], pch = 19,
+  #        title = "Sample Groups", cex = 0.7)
+  # dev.off()
+  # 
+  # 
+  # ### BASED ON PREDICTED RACE INFO
+  # ### extract raw counts of samples of our interest and run DE analysis
+  # rCnt <- raw_count_tcga_coad_read[,which(sample_info_tcga_coad_read$`Case ID` %in% clinicalInfo_640$`Patient ID`[union(which(clinicalInfo_640$Prediction_Filtered == "African"),which(clinicalInfo_640$Prediction_Filtered == "Caucasian"))])]
+  # grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(rCnt),"Case ID"],"Prediction_Filtered"]
+  # grp <- sapply(grp, function(x) {
+  #   if(x == "African")
+  #     return("AA")
+  #   else if(x == "Caucasian")
+  #     return("CC")
+  #   else
+  #     return(NA)
+  # }, USE.NAMES = FALSE)
+  # deresult <- deseqWithComparisons(rCnt = rCnt, grp = grp,
+  #                                  exp_class = "AA", ctrl_class = "CC",
+  #                                  bat_eff = NULL, thresh = 1)
+  # 
+  # ### write out the DE result table, draw a volcano plot, and perform pathway analysis
+  # fileName <- "AA_vs_CC_predicted"
+  # write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
+  #             file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
+  # volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
+  # pathresult <- pathwayAnalysis_CP(geneList = gs2eg[rownames(deresult)[which(deresult$padj < padj_thres)]],
+  #                                  org = "human", database = "GO",
+  #                                  displayNum = 50, title = paste0("pathway_", fileName),
+  #                                  pv_threshold = padj_thres, dir = outputDir)
+  # write.xlsx2(pathresult, file = paste0(outputDir, "pathway_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
+  # 
+  # ### QC - MDS plots
+  # normCnt <- normalizeRNASEQwithVST(rCnt)
+  # ### original MDS
+  # mdsPlot(normCnt, groups = grp, save = TRUE, pch = 19,
+  #         main = fileName, xlab = "Dimension1", ylab = "Dimension2",
+  #         f_name = paste0(outputDir, "mdsplot_", fileName, ".png"))
+  # 
+  # ### select the top genes for MDS using limma
+  # ### race
+  # png(paste0(outputDir, "mdsplot2_", fileName, "_race.png"), width = 2000, height = 1000, res = 130)
+  # par(mfrow=c(1,2))
+  # grp <- clinicalInfo_640[sample_info_tcga_coad_read[colnames(normCnt),"Case ID"],"MSI_RACE_Status2"]
+  # grp <- sapply(grp, function(x) strsplit(x, split = "_", fixed = TRUE)[[1]][2], USE.NAMES = FALSE)
+  # if(length(which(is.na(grp))) > 0) {
+  #   grp[which(is.na(grp))] <- "NA"
+  # }
+  # colors = rainbow(length(unique(as.character(grp))))
+  # names(colors) = unique(as.character(grp))
+  # plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+  #         xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+  # legend("topright", legend = unique(as.character(grp)),
+  #        col = colors[unique(as.character(grp))], pch = 19,
+  #        title = "Sample Groups", cex = 0.7)
+  # plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+  #         xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+  # legend("topright", legend = unique(as.character(grp)),
+  #        col = colors[unique(as.character(grp))], pch = 19,
+  #        title = "Sample Groups", cex = 0.7)
+  # dev.off()
+  
   
   # ### test with other TCGA data -PAAD
   # load("./data/rnaseq/raw_count_tcga_paad.rda")
