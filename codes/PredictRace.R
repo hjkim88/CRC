@@ -158,8 +158,8 @@ predict_race <- function(combinedDataPath="//isilon.c2b2.columbia.edu/ifs/archiv
   
   ### run eigenstrat on the data
   eigen_result <- eigenstrat(genoFile = "eigenstratG.eg.txt", outFile.Robj = NULL, outFile.txt = NULL)$topK.eigenvectors
-  pcoc_result <- pcoc(genoFile = "eigenstratG.eg.txt", outFile.txt = "pcoc.result.txt",
-                      n.MonteCarlo = 100, num.splits = (length(unique(sample_info$Race1))-1))
+  # pcoc_result <- pcoc(genoFile = "eigenstratG.eg.txt", outFile.txt = "pcoc.result.txt",
+  #                     n.MonteCarlo = 100, num.splits = (length(unique(sample_info$Race1))-1))
   
   ### remove the temporary 012 file
   file.remove("eigenstratG.eg.txt")
@@ -290,11 +290,11 @@ predict_race <- function(combinedDataPath="//isilon.c2b2.columbia.edu/ifs/archiv
   ### race prediction based on the cluster of 1000GP
   
   ### calculate cluster means (or medians)
-  medians <- vector("list", (length(unique(sample_info$Race1)) - 1))
-  names(medians) <- unique(sample_info$Race1)[1:length(medians)]
-  for(i in 1:length(medians)) {
+  means <- vector("list", (length(unique(sample_info$Race1)) - 1))
+  names(means) <- unique(sample_info$Race1)[1:length(means)]
+  for(i in 1:length(means)) {
     ### mean of 3 dimensions - 3 points per row - the number of components PC1, PC2, and PC3
-    medians[[i]] <- apply(eigen_result[which(sample_info$Race1 == names(medians)[i]),1:3], 2, mean)
+    means[[i]] <- apply(eigen_result[which(sample_info$Race1 == names(means)[i]),1:3], 2, mean)
   }
   
   ### add prediction result columns to the sample info
@@ -307,16 +307,16 @@ predict_race <- function(combinedDataPath="//isilon.c2b2.columbia.edu/ifs/archiv
   ### predict the race of the test samples (TCGA)
   testIdx <- which(sample_info$Race1 == "Test_Samples")
   for(idx in testIdx) {
-    ### calculate Euclidean distance between samples and medians
+    ### calculate Euclidean distance between samples and means
     ### only using PC1, PC2, and PC3
-    sample_info$Dist_CC[idx] <- euc.dist(eigen_result[idx,1:3], medians[[1]])
-    sample_info$Dist_EA[idx] <- euc.dist(eigen_result[idx,1:3], medians[[2]])
-    sample_info$Dist_LT[idx] <- euc.dist(eigen_result[idx,1:3], medians[[3]])
-    sample_info$Dist_SA[idx] <- euc.dist(eigen_result[idx,1:3], medians[[4]])
-    sample_info$Dist_AF[idx] <- euc.dist(eigen_result[idx,1:3], medians[[5]])
+    sample_info$Dist_CC[idx] <- euc.dist(eigen_result[idx,1:3], means[[1]])
+    sample_info$Dist_EA[idx] <- euc.dist(eigen_result[idx,1:3], means[[2]])
+    sample_info$Dist_LT[idx] <- euc.dist(eigen_result[idx,1:3], means[[3]])
+    sample_info$Dist_SA[idx] <- euc.dist(eigen_result[idx,1:3], means[[4]])
+    sample_info$Dist_AF[idx] <- euc.dist(eigen_result[idx,1:3], means[[5]])
     
     ### predict race of the samples
-    sample_info$Prediction[idx] <- names(medians)[which(sample_info[idx,] == min(sample_info[idx,8:12]))-7]
+    sample_info$Prediction[idx] <- names(means)[which(sample_info[idx,] == min(sample_info[idx,8:12]))-7]
   }
   
   ### accuracy
@@ -340,12 +340,6 @@ predict_race <- function(combinedDataPath="//isilon.c2b2.columbia.edu/ifs/archiv
   writeLines(paste("Accuracy (Caucasian, African, Asian) = ", (length(which(acc))/length(acc))*100, "%"))
   writeLines(paste(length(which(acc)), "cases are correct out of", length(acc), "cases"))
   
-  ### write out the result table
-  write.table(data.frame(sample_info[testIdx,c(3,4)], Race=sample_info$Race2[testIdx],
-                         sample_info[testIdx,8:13], stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputResultDir, "Race_Prediction_Result.txt"),
-              sep = "\t", row.names = FALSE)
-  
   ### draw a plot with the predicted results
   png(paste0(outputResultDir, "PCA_1000g_TCGA_COAD_READ_Prediction.png"),
       width = 2200, height = 1200, res = 130)
@@ -354,7 +348,55 @@ predict_race <- function(combinedDataPath="//isilon.c2b2.columbia.edu/ifs/archiv
   lbls <- c(paste0(sample_info$Race2[1:2504], "_1000GP"), paste0(sample_info$Prediction[2505:3814], "_TCGA"))
   
   ### set the colors for labeling for each sample group
-  colors <- c("red", "yellow", "green", "skyblue", "blue", "orange", "gray", "pink", "purple", "black")
+  colors <- c("red", "yellow", "green", "skyblue", "blue", "orange", "gray", "pink", "purple")
+  names(colors) <- unique(lbls)
+  
+  ### two plots in one file
+  par(mfrow=c(1,2))
+  
+  ### make a plot with Race2 - PC1 & PC2
+  plot(eigen_result[,1], eigen_result[,2], main="1000 Genomes Project + TCGA COAD/READ - PC1 & PC2",
+       xlab="Component1", ylab="Component2",
+       col = colors[lbls], pch = c(rep(19, 2504), rep(15, 1310)))
+  legend("topright", legend = unique(lbls),
+         col = colors[unique(lbls)], pch = c(rep(19, 5), rep(15, 5)),
+         title = "Sample Groups", cex = 0.7)
+  
+  ### make a plot with Race2 - PC1 & PC3
+  plot(eigen_result[,1], eigen_result[,3], main="1000 Genomes Project + TCGA COAD/READ - PC1 & PC3",
+       xlab="Component1", ylab="Component3",
+       col = colors[lbls], pch = c(rep(19, 2504), rep(15, 1310)))
+  legend("topright", legend = unique(lbls),
+         col = colors[unique(lbls)], pch = c(rep(19, 5), rep(15, 5)),
+         title = "Sample Groups", cex = 0.7)
+  
+  dev.off()
+  
+  ### based on the figure generated right above, filter out some ambiguous samples 
+  filter_idx <- intersect(testIdx,
+                          intersect(intersect(which(eigen_result[,1] > 0), which(eigen_result[,1] < 0.01)),
+                                    intersect(which(eigen_result[,2] > -0.004), which(eigen_result[,2] < 0.01))))
+  
+  ### add a column for the filtered out predictions
+  sample_info <- data.frame(sample_info, Prediction_Filtered=sample_info$Prediction,
+                            stringsAsFactors = FALSE, check.names = FALSE)
+  sample_info$Prediction_Filtered[filter_idx] <- "Filtered"
+  
+  ### write out the result table
+  write.table(data.frame(sample_info[testIdx,c(3,4)], Race=sample_info$Race2[testIdx],
+                         sample_info[testIdx,8:14], stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputResultDir, "Race_Prediction_Result.txt"),
+              sep = "\t", row.names = FALSE)
+  
+  ### draw a plot with the predicted & filtered results
+  png(paste0(outputResultDir, "PCA_1000g_TCGA_COAD_READ_Prediction_filtered.png"),
+      width = 2200, height = 1200, res = 130)
+  
+  ### labels
+  lbls <- c(paste0(sample_info$Race2[1:2504], "_1000GP"), paste0(sample_info$Prediction_Filtered[2505:3814], "_TCGA"))
+  
+  ### set the colors for labeling for each sample group
+  colors <- c("red", "yellow", "green", "skyblue", "blue", "orange", "gray", "pink", "black")
   names(colors) <- unique(lbls)
   
   ### two plots in one file
