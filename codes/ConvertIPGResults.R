@@ -12,7 +12,7 @@
 #
 #   Example
 #               > source("The_directory_of_ConvertIPGResults.R/ConvertIPGResults.R")
-#               > convertIPG(inputDir="./results/rnaseq/iPathwayGuide/")
+#               > convertIPG(inputDir="./results/rnaseq/preprocessed_raw_counts/iPathwayGuide/")
 ###
 
 convertIPG <- function(inputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/af_lab/Parvathi_Myer/results/rnaseq/iPathwayGuide/") {
