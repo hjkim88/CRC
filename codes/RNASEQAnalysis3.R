@@ -546,7 +546,7 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
                                    bat_eff = NULL, thresh = 1)
   
   ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "msi-h_young_vs_old"
+  fileName <- "MSI-H_Young_vs_Old"
   write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
@@ -598,7 +598,7 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
                                    bat_eff = NULL, thresh = 1)
   
   ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "mss_young_vs_old"
+  fileName <- "MSS_Young_vs_Old"
   write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
@@ -650,7 +650,7 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
                                    bat_eff = NULL, thresh = 1)
   
   ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "msi-h_AA_vs_CC"
+  fileName <- "MSI-H_AA_vs_CC"
   write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
@@ -702,7 +702,7 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
                                    bat_eff = NULL, thresh = 1)
   
   ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "mss_AA_vs_CC"
+  fileName <- "MSS_AA_vs_CC"
   write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
@@ -754,7 +754,7 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
                                    bat_eff = NULL, thresh = 1)
   
   ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "msi-h_AA_vs_CC_predicted"
+  fileName <- "MSI-H_AA_vs_CC_predicted"
   write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
@@ -806,7 +806,7 @@ rnaseq_parvathi3 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
                                    bat_eff = NULL, thresh = 1)
   
   ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "mss_AA_vs_CC_predicted"
+  fileName <- "MSS_AA_vs_CC_predicted"
   write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
   volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
