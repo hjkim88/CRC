@@ -103,13 +103,13 @@ combAnalysis <- function(methylPath="./results/methylation/",
       }
     }
 
-    ### run only if there are DE gene - associated CpGs
+    ### run only if there are (more than 1) DE genes - associated CpGs
     assoc_idx <- which(!is.na(degs$CpG))
     if(length(assoc_idx) > 1) {
-
+    
       ### create new column and put NAs
       degs$MethylMean <- NA
-
+      
       ### calculate mean FDR of CpGs
       for(i in assoc_idx) {
         temp <- strsplit(degs$CpG[i], ";")[[1]]
@@ -157,8 +157,6 @@ combAnalysis <- function(methylPath="./results/methylation/",
       ggsave(filename = paste0(outputDir, fName), width = 10, height = 10)
       
       ### make a table
-      result_table <- data.frame(Gene_Symbol=rownames(degs)[assoc_idx], degs[assoc_idx,-8],
-                                 stringsAsFactors = FALSE, check.names = FALSE)
       result_table <- matrix(NA, 1, 20)
       colnames(result_table) <- c(paste0("DEG_", c("Gene_Name", colnames(degs)[1:7])), paste0("DMP_", colnames(dmps)[c(1:6, 10:13, 15:16)]))
       for(idx in assoc_idx) {
@@ -449,8 +447,21 @@ combAnalysis <- function(methylPath="./results/methylation/",
         }
         
         png(paste0(outputDir, "DEMG_Level_Correlations", comp, "_", one, ".png"), width = 2000, height = 1200, res = 120)
-        par(mfrow=c(4,5), oma = c(0,0,3,0))
+        if(length(important_genes) == 2) {
+          par(mfrow=c(1,2), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 4) {
+          par(mfrow=c(2,2), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 6) {
+          par(mfrow=c(2,3), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 9) {
+          par(mfrow=c(3,3), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 12) {
+          par(mfrow=c(3,4), oma = c(0,0,3,0))
+        } else {
+          par(mfrow=c(4,5), oma = c(0,0,3,0))
+        }
         for(gene in important_genes) {
+          ### if there are more than one cpgs per one gene, just use the first one
           cpg <- result_table[which(result_table[,"DEG_Gene_Name"] == gene)[1],"DEG_CpG"][[1]]
           plot(as.numeric(gexpLev[gene,samps]), methylLev[cpg,samps], pch = 19,
                main = sprintf("P.Cor = %s, p-value = %s",
