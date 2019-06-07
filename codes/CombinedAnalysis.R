@@ -24,15 +24,15 @@
 #                              outputDir="./results/combined/")
 ###
 
-combAnalysis <- function(methylPath="./results/methylation/",
-                         methylRDAPath="./data/methylation/preprocessed/norm_beta_tcga_coad_read.rda",
-                         rnaseqPath="./results/rnaseq/preprocessed_raw_counts/RNA_Seq_Analyses(Gene_Symbol)/DE_results/",
-                         rnaseqRDAPath="./data/rnaseq/raw_count_tcga_coad_read.rda",
-                         geneRIFPath="../Periodontitis/data/generifs_basic.txt",
-                         clinInfoPath="./data/coadread_tcga_clinical_data_updated.txt",
+combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/methylation/differential_methylation/",
+                         methylRDAPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/norm_beta_tcga_coad_read.rda",
+                         rnaseqPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/rnaseq/RNA_Seq_Analyses(Gene_Symbol)/DE_results/",
+                         rnaseqRDAPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/raw_count_tcga_coad_read.rda",
+                         geneRIFPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Papapanou/Sept_2018/PreprocessedData/generifs_basic.txt",
+                         clinInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated.txt",
                          fdrThreshold=0.05,
                          logFCThreshold=0,
-                         outputDir="./results/combined/") {
+                         outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/combined/") {
   
   ### load libraries
   options(java.parameters = "-Xmx8000m")
