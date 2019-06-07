@@ -446,7 +446,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
           samps <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_AGE_Status == one)])
         }
         
-        png(paste0(outputDir, "DEMG_Level_Correlations", comp, "_", one, ".png"), width = 2000, height = 1200, res = 120)
+        png(paste0(outputDir, "DEMG_Level_Correlations_", comp, "_", one, ".png"), width = 2000, height = 1200, res = 120)
         if(length(important_genes) == 2) {
           par(mfrow=c(1,2), oma = c(0,0,3,0))
         } else if(length(important_genes) <= 4) {
