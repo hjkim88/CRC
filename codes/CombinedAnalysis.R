@@ -175,7 +175,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       
       # Create variables to be used by the methods that map back and forth betweer symbols 
       # and entrez ids
-      if (!exists("utils.env")){
+      if(!exists("utils.env")){
         utils.env = new.env()
         utils.env$gene_symbols = keys(org.Hs.eg.db,  keytype="SYMBOL")
         utils.env$gene_aliases = keys(org.Hs.eg.db,  keytype="ALIAS")
@@ -433,50 +433,70 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       rm(normB)
       gc()
       
-      ### for each class
+      ### colect genes that are DE & DM
       important_genes <- unique(cor_data$Label[which(cor_data$Label != "")])
+      
+      ### get class info of the comparison
       compare <- strsplit(comp, "_", fixed = TRUE)[[1]]
       compare <- c(paste0(compare[1], "_", compare[2]), paste0(compare[1], "_", compare[4]))
+      
+      ### get sample names for each class
+      samps <- vector("list", length = 3)
+      names(samps) <- c(compare, "Total")
       for(one in compare) {
         if(endsWith(comp, "predicted")) {
-          samps <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status2 == one)])
+          samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status2 == one)])
         } else if(endsWith(comp, "CC")) {
-          samps <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status1 == one)])
+          samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status1 == one)])
         } else {
-          samps <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_AGE_Status == one)])
+          samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_AGE_Status == one)])
         }
-        
-        png(paste0(outputDir, "DEMG_Level_Correlations_", comp, "_", one, ".png"), width = 2000, height = 1200, res = 120)
-        if(length(important_genes) == 2) {
-          par(mfrow=c(1,2), oma = c(0,0,3,0))
-        } else if(length(important_genes) <= 4) {
-          par(mfrow=c(2,2), oma = c(0,0,3,0))
-        } else if(length(important_genes) <= 6) {
-          par(mfrow=c(2,3), oma = c(0,0,3,0))
-        } else if(length(important_genes) <= 9) {
-          par(mfrow=c(3,3), oma = c(0,0,3,0))
-        } else if(length(important_genes) <= 12) {
-          par(mfrow=c(3,4), oma = c(0,0,3,0))
-        } else {
-          par(mfrow=c(4,5), oma = c(0,0,3,0))
-        }
-        for(gene in important_genes) {
-          ### if there are more than one cpgs per one gene, just use the first one
-          cpg <- result_table[which(result_table[,"DEG_Gene_Name"] == gene)[1],"DEG_CpG"][[1]]
-          plot(as.numeric(gexpLev[gene,samps]), methylLev[cpg,samps], pch = 19,
-               main = sprintf("P.Cor = %s, p-value = %s",
-                              round(cor(as.numeric(gexpLev[gene,samps]), methylLev[cpg,samps], use = "pairwise.complete.obs"), 5),
-                              signif(cor.test(as.numeric(gexpLev[gene,samps]), methylLev[cpg,samps])$p.value, 5)),
-               xlab = paste("Normalized Expression of", gene),
-               ylab = paste("Normalized Beta value of", cpg))
-          abline(lm(methylLev[cpg,samps]~as.numeric(gexpLev[gene,samps])), col="red")
-        }
-        mtext(paste("Level Correlations", one), outer = TRUE, cex = 2)
-        dev.off()
+      }
+      samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
+      
+      ### print level correlation plots
+      png(paste0(outputDir, "DEMG_Level_Correlations_", comp, "_", one, ".png"), width = 2000, height = 1200, res = 120)
+      
+      ### decide grid based on the number of the plots
+      if(length(important_genes) == 2) {
+        par(mfrow=c(1,2), oma = c(0,0,3,0))
+      } else if(length(important_genes) <= 4) {
+        par(mfrow=c(2,2), oma = c(0,0,3,0))
+      } else if(length(important_genes) <= 6) {
+        par(mfrow=c(2,3), oma = c(0,0,3,0))
+      } else if(length(important_genes) <= 9) {
+        par(mfrow=c(3,3), oma = c(0,0,3,0))
+      } else if(length(important_genes) <= 12) {
+        par(mfrow=c(3,4), oma = c(0,0,3,0))
+      } else {
+        par(mfrow=c(4,5), oma = c(0,0,3,0))
       }
       
+      ### color for the sample based on their classes
+      ### based on - samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
+      colors <- c(rep("blue", length(samps[[compare[1]]])), rep("green", length(samps[[compare[2]]])))
+      
+      ### for each gene draw a plot
+      for(gene in important_genes) {
+        ### if there are more than one cpgs per one gene, just use the first one
+        cpg <- result_table[which(result_table[,"DEG_Gene_Name"] == gene)[1],"DEG_CpG"][[1]]
+        plot(as.numeric(gexpLev[gene,samps[["Total"]]]), methylLev[cpg,samps[["Total"]]], pch = 19,
+             col = colors,
+             main = sprintf("P.Cor = %s, p-value = %s",
+                            round(cor(as.numeric(gexpLev[gene,samps[["Total"]]]), methylLev[cpg,samps[["Total"]]], use = "pairwise.complete.obs"), 5),
+                            signif(cor.test(as.numeric(gexpLev[gene,samps[["Total"]]]), methylLev[cpg,samps[["Total"]]])$p.value, 5)),
+             xlab = paste("Normalized Expression of", gene),
+             ylab = paste("Normalized Beta value of", cpg))
+        abline(lm(methylLev[cpg,samps[["Total"]]]~as.numeric(gexpLev[gene,samps[["Total"]]])), col="red")
+        legend("topright", legend = compare,
+               col = c("blue", "green"), pch = 19,
+               title = "Sample Groups", cex = 0.7)
+      }
+      mtext(paste("Level Correlations", one), outer = TRUE, cex = 2)
+      dev.off()
+      
     }
-  
+    
   }
   
 }
