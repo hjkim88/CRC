@@ -455,7 +455,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
       
       ### print level correlation plots
-      png(paste0(outputDir, "DEMG_Level_Correlations_", comp, "_", one, ".png"), width = 2000, height = 1200, res = 120)
+      png(paste0(outputDir, "DEMG_Level_Correlations_", comp, ".png"), width = 2000, height = 1200, res = 120)
       
       ### decide grid based on the number of the plots
       if(length(important_genes) == 2) {
