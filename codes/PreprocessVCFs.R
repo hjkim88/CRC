@@ -17,6 +17,8 @@
 #                                outputPath="./data/somatic_mutation/somatic_mutation_vcfs_tcga_coad_read.rda")
 ###
 
+### THE FILE SIZE IS TOO LARGE, THEREFORE, I DID NOT UPLOAD THE DATA ON THE SERVER,
+### AND JUST RAN IT ON MY LOCAL COMPUTER
 preprocessVCFs <- function(vcfFilePath="./data/somatic_mutation/",
                            sampleSheetPath="./data/somatic_mutation/gdc_sample_sheet_tcga_coad_read_mutect2_vcfs.tsv",
                            outputPath="./data/somatic_mutation/somatic_mutation_vcfs_tcga_coad_read.rda") {
