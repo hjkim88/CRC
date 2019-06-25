@@ -51,7 +51,7 @@ combineMAFs <- function(MAF_path="//isilon.c2b2.columbia.edu/ifs/archive/shares/
   write.table(maf, file = outputPath, sep = "\t", row.names = FALSE, quote = FALSE)
   
   ### these are optional comments at the top of the MAF file
-  ### you could add the following to above of the file
+  ### you could add the following to the top of the file
   writeLines("#version gdc-1.0.0")
   writeLines("#filedate 20190624")
   writeLines("#annotation.spec gdc-1.0.1-public")
@@ -59,4 +59,3 @@ combineMAFs <- function(MAF_path="//isilon.c2b2.columbia.edu/ifs/archive/shares/
   writeLines(paste0("#tumor.aliquots.submitter_id ", paste(unique(maf$Tumor_Sample_Barcode), collapse = ",")))
   
 }
-
