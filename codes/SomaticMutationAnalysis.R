@@ -42,6 +42,12 @@ sm_analysis <- function(vcfRDAfilePath="//isilon.c2b2.columbia.edu/ifs/archive/s
     install.packages("survival")
     require(survival, quietly = TRUE)
   }
+  if(!require(org.Hs.eg.db, quietly = TRUE)) {
+    if(!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("org.Hs.eg.db", version = "3.8")
+    require(org.Hs.eg.db, quietly = TRUE)
+  }
   
   ### load data
   load(vcfRDAfilePath)
@@ -250,5 +256,48 @@ sm_analysis <- function(vcfRDAfilePath="//isilon.c2b2.columbia.edu/ifs/archive/s
          title = "Sample Groups", cex = 0.8)
   mtext(fName, outer = TRUE, cex = 2)
   dev.off()
+  
+    
+  ### Gene burden
+  
+  ### a function to only get gene symbols from the VEP string
+  getGenesFromVEP <- function(str) {
+    str <- strsplit(str, split = ";", fixed = TRUE)[[1]][3]
+    str <- strsplit(str, split = ",", fixed = TRUE)[[1]]
+    str <- sapply(str, function(x) strsplit(x, split = "|", fixed = TRUE)[[1]][4], USE.NAMES = FALSE)
+    
+    return(unique(str[which(str != "")]))
+  }
+  
+  ### get all the gene symbols
+  all_gene_symbols <- keys(org.Hs.eg.db, keytype = "SYMBOL")
+  
+  ### make an empty somatic mutation per gene matrix
+  somatic_mutations_per_gene <- matrix(0, length(all_gene_symbols), length(vcf))
+  rownames(somatic_mutations_per_gene) <- all_gene_symbols
+  colnames(somatic_mutations_per_gene) <- names(vcf)
+  
+  ### count mutations per gene
+  for(i in 1:length(vcf)) {
+    for(j in 1:nrow(vcf[[i]])) {
+      gene_list <- getGenesFromVEP(vcf[[i]]$INFO[j])
+      gene_list <- gene_list[which(gene_list %in% all_gene_symbols)]
+      for(gene in gene_list) {
+        somatic_mutations_per_gene[gene,names(vcf)[i]] <- somatic_mutations_per_gene[gene,names(vcf)[i]] + 1
+      }  
+    }
+    ### progress
+    writeLines(paste(i, "/", length(vcf)))
+  }
+  
+  ### write out the result
+  write.table(data.frame(Gene=rownames(somatic_mutations_per_gene), somatic_mutations_per_gene,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(outputDir, "Somatic_Mutations_per_Gene.txt"),
+              sep = "\t", row.names = FALSE)
+  
+  ### t-test for every comparison
+  
+  
   
 }
