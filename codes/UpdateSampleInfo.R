@@ -17,9 +17,9 @@
 #                                    outputPath="./data/coadread_tcga_clinical_data_updated2.txt")
 ###
 
-update_sample_info <- function(mafFilePath="./data/somatic_mutation/MAF/somatic_mutation_maf_tcga_coad_read.maf",
-                               sampleInfoPath="./data/coadread_tcga_clinical_data_updated.txt",
-                               outputPath="./data/coadread_tcga_clinical_data_updated2.txt") {
+update_sample_info <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/somatic_mutation/somatic_mutation_maf_tcga_coad_read.maf",
+                               sampleInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated.txt",
+                               outputPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated2.txt") {
   
   ### load library
   options(java.parameters = "-Xmx8000m")
