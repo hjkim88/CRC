@@ -44,6 +44,8 @@ update_sample_info <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archi
   ### update the sample info with the pole-mutant info
   sample_info$POLE_MUTANT <- FALSE
   sample_info$POLE_MUTANT[which(sample_info$`Patient ID` %in% pole_mutant_samples)] <- TRUE
+  unique_samples_in_maf <- unique(substr(maf$Tumor_Sample_Barcode, 1, 12))
+  sample_info$POLE_MUTANT[which(sample_info$`Patient ID` %in% setdiff(sample_info$`Patient ID`, unique_samples_in_maf))] <- NA
   
   ### write out the updated result
   write.table(sample_info, file = outputPath, sep = "\t", row.names = FALSE)
