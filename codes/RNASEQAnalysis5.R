@@ -23,16 +23,12 @@
 #               > source("The_directory_of_RNASEQAnalysis5.R/RNASEQAnalysis5.R")
 #               > rnaseq_parvathi5(rCntPath = "./data/rnaseq/raw_count_tcga_coad_read.rda",
 #                                  clinInfoPath_640 = "./data/coadread_tcga_clinical_data_updated2.txt",
-#                                  msiInfoPath = "./data/nationwidechildrens.org_auxiliary_coad_read.txt",
-#                                  predictedRaceInfoPath="./results/genotyping/Race_Prediction_Result.txt",
 #                                  padj_thres = 0.05,
 #                                  outputDir="./results/rnaseq/preprocessed_raw_counts3/")
 ###
 
 rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/shares/af_lab/GTEx/RDA_Files/TCGA_RAW_COUNTS.rda",
                              clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated2.txt",
-                             msiInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/nationwidechildrens.org_auxiliary_coad_read.txt",
-                             predictedRaceInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/genotyping/Race_Prediction_Result.txt",
                              padj_thres = 0.05,
                              outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/rnaseq/") {
   
