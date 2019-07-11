@@ -13,9 +13,9 @@
 #
 #   Example
 #               > source("The_directory_of_CombinedAnalysis.R/CombinedAnalysis.R")
-#               > combAnalysis(methylPath="./results/methylation/",
+#               > combAnalysis(methylPath="./results/methylation/differential_methylation/",
 #                              methylRDAPath="./data/methylation/preprocessed/norm_beta_tcga_coad_read.rda",
-#                              rnaseqPath="./results/rnaseq/preprocessed_raw_counts/RNA_Seq_Analyses(Gene_Symbol)/DE_results/",
+#                              rnaseqPath="./results/rnaseq/preprocessed_raw_counts3/",
 #                              rnaseqRDAPath="./data/rnaseq/raw_count_tcga_coad_read.rda",
 #                              geneRIFPath="../Periodontitis/data/generifs_basic.txt",
 #                              clinInfoPath="./data/coadread_tcga_clinical_data_updated.txt",
@@ -26,7 +26,7 @@
 
 combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/methylation/differential_methylation/",
                          methylRDAPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/norm_beta_tcga_coad_read.rda",
-                         rnaseqPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/rnaseq/RNA_Seq_Analyses(Gene_Symbol)/DE_results/",
+                         rnaseqPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/rnaseq/",
                          rnaseqRDAPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/raw_count_tcga_coad_read.rda",
                          geneRIFPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Papapanou/Sept_2018/PreprocessedData/generifs_basic.txt",
                          clinInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated.txt",
@@ -66,6 +66,36 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
   clinInfo <- read.table(clinInfoPath, header = TRUE, sep = "\t",
                          stringsAsFactors = FALSE, check.names = FALSE)
   rownames(clinInfo) <- clinInfo$`Sample ID`
+  
+  ### add tissue location info to the clinical info
+  clinInfo$TUMOR_LOCATION <- NA
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Cecum")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Ascending Colon")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Hepatic Flexure")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Transverse Colon")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Splenic Flexure")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Descending Colon")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Sigmoid Colon")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Rectum")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Rectosigmoid Junction")] <- "Distal"
+  
+  ### add new MSI info to the sample info since MSI-L should be treated as MSS
+  clinInfo$NEW_MSI <- clinInfo$MSI
+  clinInfo$NEW_MSI[which(clinInfo$NEW_MSI == "MSI-L")] <- "MSS"
+  
+  ### change other MSI-related info
+  clinInfo$MSI_AGE_Status[intersect(which(clinInfo$MSI == "MSI-L"),
+                                            which(clinInfo$`Diagnosis Age` < 50))] <- "MSS_Young"
+  clinInfo$MSI_AGE_Status[intersect(which(clinInfo$MSI == "MSI-L"),
+                                            which(clinInfo$`Diagnosis Age` >= 50))] <- "MSS_Old"
+  clinInfo$MSI_RACE_Status1[intersect(which(clinInfo$MSI == "MSI-L"),
+                                              which(clinInfo$`Race Category` == "BLACK OR AFRICAN AMERICAN"))] <- "MSS_AA"
+  clinInfo$MSI_RACE_Status1[intersect(which(clinInfo$MSI == "MSI-L"),
+                                              which(clinInfo$`Race Category` == "WHITE"))] <- "MSS_CC"
+  clinInfo$MSI_RACE_Status2[intersect(which(clinInfo$MSI == "MSI-L"),
+                                              which(clinInfo$Prediction_Filtered == "African"))] <- "MSS_AA"
+  clinInfo$MSI_RACE_Status2[intersect(which(clinInfo$MSI == "MSI-L"),
+                                              which(clinInfo$Prediction_Filtered == "Caucasian"))] <- "MSS_CC"
   
   ### load the data
   load(methylRDAPath)
@@ -303,6 +333,9 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
     ### print progress
     writeLines(paste0(comp))
     
+    ### create a directory for the comparison
+    dir.create(path = paste0(outputDir, comp))
+    
     ### load DMP result
     dmps <- read.xlsx2(file = paste0(methylPath, comp, "/DMP/DMPs_", comp, ".xlsx"),
                        sheetIndex = 1, row.names = 1, colClasses = NA,
@@ -314,7 +347,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
                        stringsAsFactors = FALSE, check.names = FALSE)
     
     ### load DE result
-    degs <- read.xlsx2(file = paste0(rnaseqPath, "deresult_", comp, ".xlsx"),
+    degs <- read.xlsx2(file = paste0(rnaseqPath, comp, "/deresult_", comp, ".xlsx"),
                        sheetIndex = 1, row.names = 1, colClasses = NA,
                        stringsAsFactors = FALSE, check.names = FALSE)
     
@@ -368,9 +401,9 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       }
     }
     
-    ### run only if there are (more than 1) DE genes - associated CpGs
+    ### run only if there are (more than 2) DE genes - associated CpGs
     assoc_idx <- which(!is.na(degs$CpGs))
-    if(length(assoc_idx) > 1) {
+    if(length(assoc_idx) > 2) {
     
       ### create new column and put NAs
       degs$CpG <- NA
@@ -427,7 +460,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
         scale_linetype_manual(name = "FDR Threshold", values = c(2),
                               guide = guide_legend(override.aes = list(color = c("red")))) +
         theme_classic(base_size = 16)
-      ggsave(filename = paste0(outputDir, fName), width = 10, height = 10)
+      ggsave(filename = paste0(outputDir, comp, "/", fName), width = 10, height = 10)
       
       ### make a table
       result_table <- matrix(NA, 1, 20)
@@ -441,7 +474,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       result_table <- result_table[-1,]
       
       ### write out the table result
-      write.xlsx2(result_table, file = paste0(outputDir, "DEG_DMP_combined_", comp, ".xlsx"),
+      write.xlsx2(result_table, file = paste0(outputDir, comp, "/", "DEG_DMP_combined_", comp, ".xlsx"),
                   sheetName = comp, row.names = FALSE)
       
       ### GeneRIF analysis
@@ -463,87 +496,131 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       add_info <- add_info[!rIdx,]
       
       ### write out the result
-      write.xlsx2(add_info, file = paste0(outputDir, "GeneRIF_DMP_", comp, ".xlsx"), row.names = FALSE)
+      write.xlsx2(add_info, file = paste0(outputDir, comp, "/", "GeneRIF_DMP_", comp, ".xlsx"), row.names = FALSE)
       
       ### pathway analysis
       
       ### get pathways
       pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(unique(cor_data$Gene_Name)), org = "human", database = "GO", imgPrint = TRUE,
                                      title = paste0("Top_50_DEMG_Pathways_DMP_", comp),
-                                     displayNum = 50, dir = outputDir)
-      write.xlsx2(pathways, file = paste0(outputDir, "go_DEMG-associated_Pathways_DMP_", comp, ".xlsx"),
+                                     displayNum = 50, dir = paste0(outputDir, comp, "/"))
+      write.xlsx2(pathways, file = paste0(outputDir, comp, "/", "go_DEMG-associated_Pathways_DMP_", comp, ".xlsx"),
                   sheetName = "DEMG-associated_Pathways", row.names = FALSE)
       
       ### level correlation
       
-      ### colect genes that are DE & DM
+      ### collect genes that are DE & DM
       important_genes <- unique(cor_data$Label[which(cor_data$Label != "")])
-      
-      ### get class info of the comparison
-      compare <- strsplit(comp, "_", fixed = TRUE)[[1]]
-      compare <- c(paste0(compare[1], "_", compare[2]), paste0(compare[1], "_", compare[4]))
-      
-      ### get sample names for each class
-      samps <- vector("list", length = 3)
-      names(samps) <- c(compare, "Total")
-      for(one in compare) {
-        if(endsWith(comp, "predicted")) {
-          samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status2 == one)])
-        } else if(endsWith(comp, "CC")) {
-          samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status1 == one)])
+       
+      ### organize samples for the plot
+      if(grepl("Proximal", comp)) {
+        ### get target class
+        compare <- strsplit(comp, "_", fixed = TRUE)[[1]]
+        group <- paste0(compare[1], "_", compare[2])
+        
+        ### get sample names for each class
+        if(compare[3] == "predicted") {
+          compare <- c(paste0(group, "_", compare[4]), paste0(group, "_", compare[6]))
+          samps <- vector("list", length = 3)
+          names(samps) <- c(compare, "Total")
+          
+          samps[[compare[1]]] <- intersect(common_samples,
+                                           clinInfo$`Sample ID`[intersect(which(clinInfo$MSI_RACE_Status2 == group),
+                                                                          which(clinInfo$TUMOR_LOCATION == "Proximal"))])
+          samps[[compare[2]]] <- intersect(common_samples,
+                                           clinInfo$`Sample ID`[intersect(which(clinInfo$MSI_RACE_Status2 == group),
+                                                                          which(clinInfo$TUMOR_LOCATION == "Distal"))])
         } else {
-          samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_AGE_Status == one)])
+          compare <- c(paste0(group, "_", compare[3]), paste0(group, "_", compare[5]))
+          samps <- vector("list", length = 3)
+          names(samps) <- c(compare, "Total")
+          
+          if(grepl("Young", group) || grepl("Old", group)) {
+            samps[[compare[1]]] <- intersect(common_samples,
+                                             clinInfo$`Sample ID`[intersect(which(clinInfo$MSI_AGE_Status == group),
+                                                                            which(clinInfo$TUMOR_LOCATION == "Proximal"))])
+            samps[[compare[2]]] <- intersect(common_samples,
+                                             clinInfo$`Sample ID`[intersect(which(clinInfo$MSI_AGE_Status == group),
+                                                                            which(clinInfo$TUMOR_LOCATION == "Distal"))])
+          } else {
+            samps[[compare[1]]] <- intersect(common_samples,
+                                             clinInfo$`Sample ID`[intersect(which(clinInfo$MSI_RACE_Status1 == group),
+                                                                            which(clinInfo$TUMOR_LOCATION == "Proximal"))])
+            samps[[compare[2]]] <- intersect(common_samples,
+                                             clinInfo$`Sample ID`[intersect(which(clinInfo$MSI_RACE_Status1 == group),
+                                                                            which(clinInfo$TUMOR_LOCATION == "Distal"))])
+          }
         }
+        samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
+      } else {
+        ### get class info of the comparison
+        compare <- strsplit(comp, "_", fixed = TRUE)[[1]]
+        compare <- c(paste0(compare[1], "_", compare[2]), paste0(compare[1], "_", compare[4]))
+        
+        ### get sample names for each class
+        samps <- vector("list", length = 3)
+        names(samps) <- c(compare, "Total")
+        for(one in compare) {
+          if(endsWith(comp, "predicted")) {
+            samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status2 == one)])
+          } else if(endsWith(comp, "CC")) {
+            samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_RACE_Status1 == one)])
+          } else {
+            samps[[one]] <- intersect(common_samples, clinInfo$`Sample ID`[which(clinInfo$MSI_AGE_Status == one)])
+          }
+        }
+        samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
       }
-      samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
       
       ### print level correlation plots
-      png(paste0(outputDir, "DEMG_Level_Correlations_DMP_", comp, ".png"), width = 2000, height = 1200, res = 120)
-      
-      ### decide grid based on the number of the plots
-      if(length(important_genes) == 2) {
-        par(mfrow=c(1,2), oma = c(0,0,3,0))
-      } else if(length(important_genes) <= 4) {
-        par(mfrow=c(2,2), oma = c(0,0,3,0))
-      } else if(length(important_genes) <= 6) {
-        par(mfrow=c(2,3), oma = c(0,0,3,0))
-      } else if(length(important_genes) <= 9) {
-        par(mfrow=c(3,3), oma = c(0,0,3,0))
-      } else if(length(important_genes) <= 12) {
-        par(mfrow=c(3,4), oma = c(0,0,3,0))
-      } else {
-        par(mfrow=c(4,5), oma = c(0,0,3,0))
+      if((length(samps[[1]]) > 2) && (length(samps[[2]]) > 2)) {
+        png(paste0(outputDir, comp, "/", "DEMG_Level_Correlations_DMP_", comp, ".png"), width = 2000, height = 1200, res = 120)
+        
+        ### decide grid based on the number of the plots
+        if(length(important_genes) == 2) {
+          par(mfrow=c(1,2), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 4) {
+          par(mfrow=c(2,2), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 6) {
+          par(mfrow=c(2,3), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 9) {
+          par(mfrow=c(3,3), oma = c(0,0,3,0))
+        } else if(length(important_genes) <= 12) {
+          par(mfrow=c(3,4), oma = c(0,0,3,0))
+        } else {
+          par(mfrow=c(4,5), oma = c(0,0,3,0))
+        }
+        
+        ### color for the sample based on their classes
+        ### based on - samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
+        colors <- c(rep("blue", length(samps[[compare[1]]])), rep("green", length(samps[[compare[2]]])))
+        
+        ### for each gene draw a plot
+        for(gene in important_genes) {
+          cpg <- degs[gene,"CpG"]
+          plot(as.numeric(gexpLev[gene,samps[["Total"]]]), methylLev[cpg,samps[["Total"]]], pch = 19,
+               col = colors,
+               main = paste0(compare[1], " P.Cor = ", round(cor(as.numeric(gexpLev[gene,samps[[compare[1]]]]), methylLev[cpg,samps[[compare[1]]]], use = "pairwise.complete.obs"), 5),
+                             ", p-value = ", signif(cor.test(as.numeric(gexpLev[gene,samps[[compare[1]]]]), methylLev[cpg,samps[[compare[1]]]])$p.value, 5),
+                             "\n", compare[2], " P.Cor = ", round(cor(as.numeric(gexpLev[gene,samps[[compare[2]]]]), methylLev[cpg,samps[[compare[2]]]], use = "pairwise.complete.obs"), 5),
+                             ", p-value = ", signif(cor.test(as.numeric(gexpLev[gene,samps[[compare[2]]]]), methylLev[cpg,samps[[compare[2]]]])$p.value, 5)),
+               xlab = paste("Normalized Expression of", gene),
+               ylab = paste("Normalized Beta value of", cpg))
+          abline(lm(methylLev[cpg,samps[[compare[1]]]]~as.numeric(gexpLev[gene,samps[[compare[1]]]])), col="blue", lwd=2)
+          abline(lm(methylLev[cpg,samps[[compare[2]]]]~as.numeric(gexpLev[gene,samps[[compare[2]]]])), col="green", lwd=2)
+          legend("topright", legend = compare,
+                 col = c("blue", "green"), pch = 19,
+                 title = "Sample Groups", cex = 0.8)
+        }
+        mtext(paste("Level Correlations", comp), outer = TRUE, cex = 2)
+        dev.off()
       }
-      
-      ### color for the sample based on their classes
-      ### based on - samps[["Total"]] <- c(samps[[compare[1]]], samps[[compare[2]]])
-      colors <- c(rep("blue", length(samps[[compare[1]]])), rep("green", length(samps[[compare[2]]])))
-      
-      ### for each gene draw a plot
-      for(gene in important_genes) {
-        cpg <- degs[gene,"CpG"]
-        plot(as.numeric(gexpLev[gene,samps[["Total"]]]), methylLev[cpg,samps[["Total"]]], pch = 19,
-             col = colors,
-             main = paste0(compare[1], " P.Cor = ", round(cor(as.numeric(gexpLev[gene,samps[[compare[1]]]]), methylLev[cpg,samps[[compare[1]]]], use = "pairwise.complete.obs"), 5),
-                           ", p-value = ", signif(cor.test(as.numeric(gexpLev[gene,samps[[compare[1]]]]), methylLev[cpg,samps[[compare[1]]]])$p.value, 5),
-                           "\n", compare[2], " P.Cor = ", round(cor(as.numeric(gexpLev[gene,samps[[compare[2]]]]), methylLev[cpg,samps[[compare[2]]]], use = "pairwise.complete.obs"), 5),
-                           ", p-value = ", signif(cor.test(as.numeric(gexpLev[gene,samps[[compare[2]]]]), methylLev[cpg,samps[[compare[2]]]])$p.value, 5)),
-             xlab = paste("Normalized Expression of", gene),
-             ylab = paste("Normalized Beta value of", cpg))
-        abline(lm(methylLev[cpg,samps[[compare[1]]]]~as.numeric(gexpLev[gene,samps[[compare[1]]]])), col="blue", lwd=2)
-        abline(lm(methylLev[cpg,samps[[compare[2]]]]~as.numeric(gexpLev[gene,samps[[compare[2]]]])), col="green", lwd=2)
-        legend("topright", legend = compare,
-               col = c("blue", "green"), pch = 19,
-               title = "Sample Groups", cex = 0.8)
-      }
-      mtext(paste("Level Correlations", comp), outer = TRUE, cex = 2)
-      dev.off()
       
     }
     
     ### run only if there are (more than 1) DE genes - associated DMRs
     assoc_idx <- which(!is.na(degs$DMRs))
-    if(length(assoc_idx) > 1) {
+    if(length(assoc_idx) > 2) {
       
       ### create new column and put NAs
       degs$DMR <- NA
@@ -600,7 +677,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
         scale_linetype_manual(name = "FDR Threshold", values = c(2),
                               guide = guide_legend(override.aes = list(color = c("red")))) +
         theme_classic(base_size = 16)
-      ggsave(filename = paste0(outputDir, fName), width = 10, height = 10)
+      ggsave(filename = paste0(outputDir, comp, "/", fName), width = 10, height = 10)
       
       ### make a table
       result_table <- matrix(NA, 1, 15)
@@ -614,7 +691,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       result_table <- result_table[-1,]
       
       ### write out the table result
-      write.xlsx2(result_table, file = paste0(outputDir, "DEG_DMR_combined_", comp, ".xlsx"),
+      write.xlsx2(result_table, file = paste0(outputDir, comp, "/", "DEG_DMR_combined_", comp, ".xlsx"),
                   sheetName = comp, row.names = FALSE)
       
       ### GeneRIF analysis
@@ -636,15 +713,15 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
       add_info <- add_info[!rIdx,]
       
       ### write out the result
-      write.xlsx2(add_info, file = paste0(outputDir, "GeneRIF_DMR_", comp, ".xlsx"), row.names = FALSE)
+      write.xlsx2(add_info, file = paste0(outputDir, comp, "/", "GeneRIF_DMR_", comp, ".xlsx"), row.names = FALSE)
       
       ### pathway analysis
       
       ### get pathways
       pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(unique(cor_data$Gene_Name)), org = "human", database = "GO", imgPrint = TRUE,
                                      title = paste0("Top_50_DEMG_Pathways_DMR_", comp),
-                                     displayNum = 50, dir = outputDir)
-      write.xlsx2(pathways, file = paste0(outputDir, "go_DEMG-associated_Pathways_DMR_", comp, ".xlsx"),
+                                     displayNum = 50, dir = paste0(outputDir, comp, "/"))
+      write.xlsx2(pathways, file = paste0(outputDir, comp, "/", "go_DEMG-associated_Pathways_DMR_", comp, ".xlsx"),
                   sheetName = "DEMG-associated_Pathways", row.names = FALSE)
       
     }
