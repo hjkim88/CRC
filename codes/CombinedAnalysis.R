@@ -18,7 +18,7 @@
 #                              rnaseqPath="./results/rnaseq/preprocessed_raw_counts3/",
 #                              rnaseqRDAPath="./data/rnaseq/raw_count_tcga_coad_read.rda",
 #                              geneRIFPath="../Periodontitis/data/generifs_basic.txt",
-#                              clinInfoPath="./data/coadread_tcga_clinical_data_updated.txt",
+#                              clinInfoPath="./data/coadread_tcga_clinical_data_updated2.txt",
 #                              fdrThreshold=0.05,
 #                              logFCThreshold=0,
 #                              outputDir="./results/combined/")
@@ -29,7 +29,7 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
                          rnaseqPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/rnaseq/",
                          rnaseqRDAPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/raw_count_tcga_coad_read.rda",
                          geneRIFPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Papapanou/Sept_2018/PreprocessedData/generifs_basic.txt",
-                         clinInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated.txt",
+                         clinInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated2.txt",
                          fdrThreshold=0.05,
                          logFCThreshold=0,
                          outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/combined/") {
