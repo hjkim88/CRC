@@ -14,12 +14,12 @@
 #   Example
 #               > source("The_directory_of_MCP_Counter_Analysis.R/MCP_Counter_Analysis.R")
 #               > mcp_counter(rCntPath = "./data/rnaseq/raw_count_tcga_coad_read.rda",
-#                             clinInfoPath="./data/coadread_tcga_clinical_data_updated.txt",
+#                             clinInfoPath="./data/coadread_tcga_clinical_data_updated2.txt",
 #                             outputDir="./results/MCPcounter/")
 ###
 
 mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/raw_count_tcga_coad_read.rda",
-                        clinInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated.txt",
+                        clinInfoPath="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated2.txt",
                         outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/mcp_counter/") {
   
   ### load libraries
@@ -65,6 +65,87 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
   
   ### rownames of clinInfo == colnames of norm_gep
   clinInfo <- clinInfo[colnames(raw_count_tcga_coad_read),]
+  
+  ### remove POLE-mutated samples
+  raw_count_tcga_coad_read <- raw_count_tcga_coad_read[,-which(clinInfo$POLE_MUTANT == TRUE)]
+  clinInfo <- clinInfo[-which(clinInfo$POLE_MUTANT == TRUE),]
+  
+  ### add tissue location info to the clinical info
+  clinInfo$TUMOR_LOCATION <- NA
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Cecum")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Ascending Colon")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Hepatic Flexure")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Transverse Colon")] <- "Proximal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Splenic Flexure")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Descending Colon")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Sigmoid Colon")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Rectum")] <- "Distal"
+  clinInfo$TUMOR_LOCATION[which(clinInfo$`Patient Primary Tumor Site` == "Rectosigmoid Junction")] <- "Distal"
+  
+  ### add new MSI info to the sample info since MSI-L should be treated as MSS
+  clinInfo$NEW_MSI <- clinInfo$MSI
+  clinInfo$NEW_MSI[which(clinInfo$NEW_MSI == "MSI-L")] <- "MSS"
+  
+  ### change other MSI-related info
+  clinInfo$MSI_AGE_Status[intersect(which(clinInfo$MSI == "MSI-L"),
+                                    which(clinInfo$`Diagnosis Age` < 50))] <- "MSS_Young"
+  clinInfo$MSI_AGE_Status[intersect(which(clinInfo$MSI == "MSI-L"),
+                                    which(clinInfo$`Diagnosis Age` >= 50))] <- "MSS_Old"
+  clinInfo$MSI_RACE_Status1[intersect(which(clinInfo$MSI == "MSI-L"),
+                                      which(clinInfo$`Race Category` == "BLACK OR AFRICAN AMERICAN"))] <- "MSS_AA"
+  clinInfo$MSI_RACE_Status1[intersect(which(clinInfo$MSI == "MSI-L"),
+                                      which(clinInfo$`Race Category` == "WHITE"))] <- "MSS_CC"
+  clinInfo$MSI_RACE_Status2[intersect(which(clinInfo$MSI == "MSI-L"),
+                                      which(clinInfo$Prediction_Filtered == "African"))] <- "MSS_AA"
+  clinInfo$MSI_RACE_Status2[intersect(which(clinInfo$MSI == "MSI-L"),
+                                      which(clinInfo$Prediction_Filtered == "Caucasian"))] <- "MSS_CC"
+  
+  ### msi status Indeterminate -> NA
+  clinInfo$NEW_MSI[which(clinInfo$NEW_MSI == "Indeterminate")] <- NA
+  
+  ### add age categorical info (Old/Young)
+  clinInfo$Age <- NA
+  clinInfo$Age[which(clinInfo$`Diagnosis Age` >= 50)] <- "Old"
+  clinInfo$Age[which(clinInfo$`Diagnosis Age` < 50)] <- "Young"
+  
+  ### add race categorical info
+  clinInfo$Self_Reported_Race <- NA
+  clinInfo$Self_Reported_Race[which(clinInfo$`Race Category` == "BLACK OR AFRICAN AMERICAN")] <- "AA"
+  clinInfo$Self_Reported_Race[which(clinInfo$`Race Category` == "WHITE")] <- "CC"
+  clinInfo$Predicted_Race <- NA
+  clinInfo$Predicted_Race[which(clinInfo$Prediction_Filtered == "African")] <- "AA"
+  clinInfo$Predicted_Race[which(clinInfo$Prediction_Filtered == "Caucasian")] <- "CC"
+  
+  ### add more group info (location-related) to the clinInfo
+  clinInfo$MSI_H_Age_Distance <- NA
+  clinInfo$MSI_H_Age_Distance <- paste0(clinInfo$MSI_AGE_Status, "_", clinInfo$TUMOR_LOCATION)
+  clinInfo$MSI_H_Age_Distance[!grepl("MSI-H", clinInfo$MSI_H_Age_Distance)] <- NA
+  clinInfo$MSI_H_Age_Distance[grep("NA", clinInfo$MSI_H_Age_Distance)] <- NA
+  
+  clinInfo$MSS_Age_Distance <- NA
+  clinInfo$MSS_Age_Distance <- paste0(clinInfo$MSI_AGE_Status, "_", clinInfo$TUMOR_LOCATION)
+  clinInfo$MSS_Age_Distance[!grepl("MSS", clinInfo$MSS_Age_Distance)] <- NA
+  clinInfo$MSS_Age_Distance[grep("NA", clinInfo$MSS_Age_Distance)] <- NA
+  
+  clinInfo$MSI_H_Race1_Distance <- NA
+  clinInfo$MSI_H_Race1_Distance <- paste0(clinInfo$MSI_RACE_Status1, "_", clinInfo$TUMOR_LOCATION)
+  clinInfo$MSI_H_Race1_Distance[!grepl("MSI-H", clinInfo$MSI_H_Race1_Distance)] <- NA
+  clinInfo$MSI_H_Race1_Distance[grep("NA", clinInfo$MSI_H_Race1_Distance)] <- NA
+  
+  clinInfo$MSS_Race1_Distance <- NA
+  clinInfo$MSS_Race1_Distance <- paste0(clinInfo$MSI_RACE_Status1, "_", clinInfo$TUMOR_LOCATION)
+  clinInfo$MSS_Race1_Distance[!grepl("MSS", clinInfo$MSS_Race1_Distance)] <- NA
+  clinInfo$MSS_Race1_Distance[grep("NA", clinInfo$MSS_Race1_Distance)] <- NA
+  
+  clinInfo$MSI_H_Race2_Distance <- NA
+  clinInfo$MSI_H_Race2_Distance <- paste0(clinInfo$MSI_RACE_Status2, "_", clinInfo$TUMOR_LOCATION)
+  clinInfo$MSI_H_Race2_Distance[!grepl("MSI-H", clinInfo$MSI_H_Race2_Distance)] <- NA
+  clinInfo$MSI_H_Race2_Distance[grep("NA", clinInfo$MSI_H_Race2_Distance)] <- NA
+  
+  clinInfo$MSS_Race2_Distance <- NA
+  clinInfo$MSS_Race2_Distance <- paste0(clinInfo$MSI_RACE_Status2, "_", clinInfo$TUMOR_LOCATION)
+  clinInfo$MSS_Race2_Distance[!grepl("MSS", clinInfo$MSS_Race2_Distance)] <- NA
+  clinInfo$MSS_Race2_Distance[grep("NA", clinInfo$MSS_Race2_Distance)] <- NA
   
   ### A function to transform RNA-Seq data with VST in DESeq2 package
   normalizeRNASEQwithVST <- function(readCount, filtering=TRUE) {
@@ -562,114 +643,76 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
   
   ### set colside colors
   clinInfo[is.na(clinInfo)] <- "NA"
-  uniqueV <- unique(union(union(clinInfo$MSI_AGE_Status, clinInfo$MSI_RACE_Status1), clinInfo$MSI_RACE_Status2))
-  colors <- c("black", "white", "blue", "gray", "purple", "red", "orange", "darkcyan", "green")
+  uniqueV <- unique(c(clinInfo$NEW_MSI, clinInfo$Age, clinInfo$Self_Reported_Race, clinInfo$Predicted_Race, clinInfo$TUMOR_LOCATION))
+  colors <- c("black", "white", "gray", "blue", "red", "purple", "green", "darkcyan", "orange")
   names(colors) <- uniqueV
   
   ### heatmap
   fName <- "Heatmap_MCP-Counter_Result"
-  png(paste0(outputDir, fName, ".png"), width = 2000, height = 1200, res = 130)
+  png(paste0(outputDir, fName, ".png"), width = 2000, height = 1400, res = 130)
   par(oma=c(0,0,0,8))
   heatmap.3(mcp_result, main = fName,
             distfun = function(x) dist(x, method = "euclidean"),
-            hclustfun = function(x) hclust(x, method = "single"),
+            hclustfun = function(x) hclust(x, method = "ward.D"),
             xlab = "", ylab = "", col=greenred(100),
             scale="row", key=T, keysize=0.8, dendrogram = 'none', trace = 'none',
             labRow = rownames(mcp_result), labCol = "",
-            Rowv = FALSE, Colv = TRUE,
-            ColSideColors = cbind(colors[clinInfo$MSI_AGE_Status],
-                                  colors[clinInfo$MSI_RACE_Status1],
-                                  colors[clinInfo$MSI_RACE_Status2]),
+            Rowv = TRUE, Colv = TRUE,
+            ColSideColors = cbind(colors[clinInfo$NEW_MSI],
+                                  colors[clinInfo$Age],
+                                  colors[clinInfo$Self_Reported_Race],
+                                  colors[clinInfo$Predicted_Race],
+                                  colors[clinInfo$TUMOR_LOCATION]),
+            ColSideColorsSize = 3,
             cexRow = 1.3, cexCol = 1, na.rm = TRUE)
   legend("left", inset = 0, xpd = TRUE, title = "Sample Annotation", legend = names(colors), fill = colors, cex = 0.7, box.lty = 1)
-  legend("topright", inset = -0.02, xpd = TRUE, title = "The 3 Horizontal Bars", legend = c("Predicted Race", "Self-reported Race", "Age"), fill = "white", cex = 0.7, box.lty = 1)
+  legend("topright", inset = -0.02, xpd = TRUE, title = "The 5 Horizontal Bars", legend = c("Tumor Location", "Predicted Race", "Self-reported Race", "Age", "MSI Status"), fill = "white", cex = 0.7, box.lty = 1)
   dev.off()
   
   
   ### beeswarm plot
   
-  ### Age
-  ### make an empty plot list
-  p <- vector("list", length = nrow(mcp_result))
-  
-  ### iteratively draw a plot for every cell types
-  for(i in 1:length(p)) {
-    ### create a data frame for the plot
-    plot_df <- data.frame(MCP_Counter_Score=mcp_result[i,], Sample_Group=clinInfo$MSI_AGE_Status,
-                          stringsAsFactors = FALSE, check.names = FALSE)
+  mcp_beeswarm <- function(group) {
+    ### make an empty plot list
+    p <- vector("list", length = nrow(mcp_result))
     
-    ### draw a plot with the data frame
-    p[[i]] <- ggplot(plot_df, aes(x=Sample_Group, y=MCP_Counter_Score)) +
-      ggtitle(rownames(mcp_result)[i]) +
-      theme_classic(base_size = 10) +
-      geom_boxplot() +
-      geom_beeswarm(aes(color=Sample_Group), na.rm = TRUE) +
-      stat_compare_means() +
-      labs(x = "", y = "MCP-Counter Score") +
-      theme(legend.position="none", plot.title=element_text(hjust = 0.5))
+    ### iteratively draw a plot for every cell types
+    for(i in 1:length(p)) {
+      ### create a data frame for the plot
+      plot_df <- data.frame(MCP_Counter_Score=mcp_result[i,], Sample_Group=clinInfo[,group],
+                            stringsAsFactors = FALSE, check.names = FALSE)
+      
+      ### remove NA rows in the group
+      plot_df <- plot_df[which(plot_df$Sample_Group != "NA"),]
+      
+      ### draw a plot with the data frame
+      p[[i]] <- ggplot(plot_df, aes(x=Sample_Group, y=MCP_Counter_Score)) +
+        ggtitle(rownames(mcp_result)[i]) +
+        theme_classic(base_size = 10) +
+        geom_boxplot() +
+        geom_beeswarm(aes(color=Sample_Group), na.rm = TRUE) +
+        stat_compare_means() +
+        labs(x = "", y = "MCP-Counter Score") +
+        theme(legend.position="none", plot.title=element_text(hjust = 0.5))
+    }
+    
+    ### arrange the plots and print out
+    fName <- paste0("Beeswarm_Plot_MCP-Counter_Result_", group)
+    g <- arrangeGrob(grobs = p,
+                     layout_matrix = rbind(c(1, 2, 3, 4, 5), c(6, 7, 8, 9, 10)),
+                     top = fName)
+    ggsave(file = paste0(outputDir, fName, ".png"), g, width = 22, height = 12)
   }
   
-  ### arrange the plots and print out
-  fName <- "Beeswarm_Plot_MCP-Counter_Result_Age"
-  g <- arrangeGrob(grobs = p,
-                   layout_matrix = rbind(c(1, 2, 3, 4, 5), c(6, 7, 8, 9, 10)),
-                  top = fName)
-  ggsave(file = paste0(outputDir, fName, ".png"), g, width = 22, height = 12)
-  
-  ### Self-reported race
-  ### make an empty plot list
-  p <- vector("list", length = nrow(mcp_result))
-  
-  ### iteratively draw a plot for every cell types
-  for(i in 1:length(p)) {
-    ### create a data frame for the plot
-    plot_df <- data.frame(MCP_Counter_Score=mcp_result[i,], Sample_Group=clinInfo$MSI_RACE_Status1,
-                          stringsAsFactors = FALSE, check.names = FALSE)
-    
-    ### draw a plot with the data frame
-    p[[i]] <- ggplot(plot_df, aes(x=Sample_Group, y=MCP_Counter_Score)) +
-      ggtitle(rownames(mcp_result)[i]) +
-      theme_classic(base_size = 10) +
-      geom_boxplot() +
-      geom_beeswarm(aes(color=Sample_Group), na.rm = TRUE) +
-      stat_compare_means() +
-      labs(x = "", y = "MCP-Counter Score") +
-      theme(legend.position="none", plot.title=element_text(hjust = 0.5))
-  }
-  
-  ### arrange the plots and print out
-  fName <- "Beeswarm_Plot_MCP-Counter_Result_Reported_Race"
-  g <- arrangeGrob(grobs = p,
-                   layout_matrix = rbind(c(1, 2, 3, 4, 5), c(6, 7, 8, 9, 10)),
-                   top = fName)
-  ggsave(file = paste0(outputDir, fName, ".png"), g, width = 22, height = 12)
-  
-  ### Predicted race
-  ### make an empty plot list
-  p <- vector("list", length = nrow(mcp_result))
-  
-  ### iteratively draw a plot for every cell types
-  for(i in 1:length(p)) {
-    ### create a data frame for the plot
-    plot_df <- data.frame(MCP_Counter_Score=mcp_result[i,], Sample_Group=clinInfo$MSI_RACE_Status2,
-                          stringsAsFactors = FALSE, check.names = FALSE)
-    
-    ### draw a plot with the data frame
-    p[[i]] <- ggplot(plot_df, aes(x=Sample_Group, y=MCP_Counter_Score)) +
-      ggtitle(rownames(mcp_result)[i]) +
-      theme_classic(base_size = 10) +
-      geom_boxplot() +
-      geom_beeswarm(aes(color=Sample_Group), na.rm = TRUE) +
-      stat_compare_means() +
-      labs(x = "", y = "MCP-Counter Score") +
-      theme(legend.position="none", plot.title=element_text(hjust = 0.5))
-  }
-  
-  ### arrange the plots and print out
-  fName <- "Beeswarm_Plot_MCP-Counter_Result_Predicted_Race"
-  g <- arrangeGrob(grobs = p,
-                   layout_matrix = rbind(c(1, 2, 3, 4, 5), c(6, 7, 8, 9, 10)),
-                   top = fName)
-  ggsave(file = paste0(outputDir, fName, ".png"), g, width = 22, height = 12)
+  ### run the mcp_beeswarm() for each group
+  mcp_beeswarm("MSI_AGE_Status")
+  mcp_beeswarm("MSI_RACE_Status1")
+  mcp_beeswarm("MSI_RACE_Status2")
+  mcp_beeswarm("MSI_H_Age_Distance")
+  mcp_beeswarm("MSS_Age_Distance")
+  mcp_beeswarm("MSI_H_Race1_Distance")
+  mcp_beeswarm("MSS_Race1_Distance")
+  mcp_beeswarm("MSI_H_Race2_Distance")
+  mcp_beeswarm("MSS_Race2_Distance")
   
 }
