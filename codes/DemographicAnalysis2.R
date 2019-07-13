@@ -18,10 +18,12 @@
 #   Example
 #               > source("The_directory_of_DemographicAnalysis2.R/DemographicAnalysis2.R")
 #               > demoAnalysis2(clinInfoPath_640 = "./data/coadread_tcga_clinical_data_updated2.txt",
+#                               pie_chart_option = c("percentage", "count"),
 #                               outputDir="./results/demographic/")
 ###
 
 demoAnalysis2 <- function(clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/data/coadread_tcga_clinical_data_updated2.txt",
+                          pie_chart_option = c("percentage", "count"),
                           outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/demographic/") {
   
   ### load necessary libraries
@@ -226,13 +228,18 @@ demoAnalysis2 <- function(clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/arc
     
     ### make pie charts (stage)
     cdf <- data.frame(cdf, pcnt = NA, stringsAsFactors = FALSE, check.names = FALSE)
-    for(i in 1:length(group)) {
-      df <- cdf[cdf$Group == group[i],]
-      cdf$pcnt[cdf$Group == group[i]] <- round((df$Number / sum(df$Number, na.rm = TRUE))*100)
-    }
-    if(length(which(cdf$pcnt < 3)) > 0) {
+    if(pie_chart_option[1] == "percentage") {
+      for(i in 1:length(group)) {
+        df <- cdf[cdf$Group == group[i],]
+        cdf$pcnt[cdf$Group == group[i]] <- round((df$Number / sum(df$Number, na.rm = TRUE))*100)
+      }
       cdf$pcnt[which(cdf$pcnt < 3)] <- ""
       cdf$pcnt[which(as.numeric(cdf$pcnt) >= 3)] <- paste0(cdf$pcnt[which(as.numeric(cdf$pcnt) >= 3)], "%")
+    } else if(pie_chart_option[1] == "count") {
+      cdf$pcnt <- cdf$Number
+      cdf$pcnt[which(cdf$pcnt == 0)] <- ""
+    } else {
+      stop("The pie_chart_option should be either \"percentage\" or \"count\".")
     }
     # for loop failed because of a bug of geom_text (it uses the fixed text input - not dynamic)
     # just manually perform it 4 times
@@ -339,13 +346,18 @@ demoAnalysis2 <- function(clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/arc
     
     ### make pie charts (gender)
     cdf <- data.frame(cdf, pcnt = NA, stringsAsFactors = FALSE, check.names = FALSE)
-    for(i in 1:length(group)) {
-      df <- cdf[cdf$Group == group[i],]
-      cdf$pcnt[cdf$Group == group[i]] <- round((df$Number / sum(df$Number, na.rm = TRUE))*100)
-    }
-    if(length(which(cdf$pcnt < 3)) > 0) {
+    if(pie_chart_option[1] == "percentage") {
+      for(i in 1:length(group)) {
+        df <- cdf[cdf$Group == group[i],]
+        cdf$pcnt[cdf$Group == group[i]] <- round((df$Number / sum(df$Number, na.rm = TRUE))*100)
+      }
       cdf$pcnt[which(cdf$pcnt < 3)] <- ""
       cdf$pcnt[which(as.numeric(cdf$pcnt) >= 3)] <- paste0(cdf$pcnt[which(as.numeric(cdf$pcnt) >= 3)], "%")
+    } else if(pie_chart_option[1] == "count") {
+      cdf$pcnt <- cdf$Number
+      cdf$pcnt[which(cdf$pcnt == 0)] <- ""
+    } else {
+      stop("The pie_chart_option should be either \"percentage\" or \"count\".")
     }
     # for loop failed because of a bug of geom_text (it uses the fixed text input - not dynamic)
     # just manually perform it 4 times
