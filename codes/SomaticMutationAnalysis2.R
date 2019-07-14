@@ -41,6 +41,30 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     BiocManager::install("org.Hs.eg.db", version = "3.8")
     require(org.Hs.eg.db, quietly = TRUE)
   }
+  if(!require(org.Hs.eg.db, quietly = TRUE)) {
+    if(!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("org.Hs.eg.db", version = "3.8")
+    require(org.Hs.eg.db, quietly = TRUE)
+  }
+  if(!require(org.Hs.eg.db, quietly = TRUE)) {
+    if(!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("org.Hs.eg.db", version = "3.8")
+    require(org.Hs.eg.db, quietly = TRUE)
+  }
+  if(!require(ggplot2, quietly = TRUE)) {
+    install.packages("ggplot2")
+    require(ggplot2, quietly = TRUE)
+  }
+  if(!require(ggbeeswarm, quietly = TRUE)) {
+    install.packages("ggbeeswarm")
+    require(ggbeeswarm, quietly = TRUE)
+  }
+  if(!require(ggpubr, quietly = TRUE)) {
+    install.packages("ggpubr")
+    require(ggpubr, quietly = TRUE)
+  }
   
   ### load clinical info
   clinInfo <- read.table(sampleInfoPath, header = TRUE, sep = "\t",
@@ -118,7 +142,7 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     }
     
     ### write out the specific maf table
-    write.table(maf_table, file = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group, ".maf"),
+    write.table(new_maf_table, file = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group, ".maf"),
                 sep = "\t", row.names = FALSE, quote = FALSE)
   }
   
@@ -380,11 +404,123 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   mutation_analysis_for_comparison <- function(group1, group2) {
     
     ### load MAF files for each group
+    group1_maf <- read.maf(maf = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group1, ".maf"))
+    group2_maf <- read.maf(maf = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group2, ".maf"))
     
+    ### run driver gene and pathway analyses for each group
+    ### group1
+    dir.create(paste0(outputDir, "Driver_Genes/", group1))
+    driver_genes <- oncodrive(maf = group1_maf, AACol = "HGVSp_Short", minMut = 5)
+    if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
+      ### driver gene plot
+      png(paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Plot_", group1, ".png"), width = 1200, height = 1000, res = 130)
+      plotOncodrive(res = driver_genes, fdrCutOff = driver_gene_fdr_cutoff, useFraction = TRUE)
+      dev.off()
+      
+      ### pathway analysis
+      pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(driver_genes$Hugo_Symbol),
+                                     org = "human", database = "GO", imgPrint = TRUE,
+                                     title = paste0("Driver_Genes_Pathways_", group1),
+                                     displayNum = 50, dir = paste0(outputDir, "Driver_Genes/", group1))
+      write.xlsx2(pathways, file = paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Pathways_", group1, ".xlsx"),
+                  sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+    }
+    ### group2
+    dir.create(paste0(outputDir, "Driver_Genes/", group2))
+    driver_genes <- oncodrive(maf = group2_maf, AACol = "HGVSp_Short", minMut = 5)
+    if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
+      ### driver gene plot
+      png(paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Plot_", group2, ".png"), width = 1200, height = 1000, res = 130)
+      plotOncodrive(res = driver_genes, fdrCutOff = driver_gene_fdr_cutoff, useFraction = TRUE)
+      dev.off()
+      
+      ### pathway analysis
+      pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(driver_genes$Hugo_Symbol),
+                                     org = "human", database = "GO", imgPrint = TRUE,
+                                     title = paste0("Driver_Genes_Pathways_", group2),
+                                     displayNum = 50, dir = paste0(outputDir, "Driver_Genes/", group2))
+      write.xlsx2(pathways, file = paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Pathways_", group2, ".xlsx"),
+                  sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+    }
     
+    ### TMB
+    dir.create(paste0(outputDir, "TMB/", group1, "_vs_", group2))
+    ### combine mutation count of each group
+    df1 <- group1_maf@variant.classification.summary
+    df1 <- df1[,-1]
+    df1 <- df1 / 40
+    df1$Sample_Group <- group1
+    rownames(df1) <- group1_maf@variant.classification.summary$Tumor_Sample_Barcode
+    df2 <- group2_maf@variant.classification.summary
+    df2 <- df2[,-1]
+    df2 <- df2 / 40
+    df2$Sample_Group <- group2
+    rownames(df2) <- group2_maf@variant.classification.summary$Tumor_Sample_Barcode
+    mdf <- rbind(df1, df2)
+    rownames(mdf) <- c(rownames(df1), rownames(df2))
+    if(grepl("Old", group1) || grepl("Young", group2)) {
+      mdf$Additional_Info <- clinInfo[substr(rownames(mdf), 1, 15), "MSI_RACE_Status2"]
+    } else {
+      mdf$Additional_Info <- clinInfo[substr(rownames(mdf), 1, 15), "MSI_AGE_Status"]
+    }
+    
+    ### draw a beeswarm plot for TMB
+    ### file name
+    fName <- paste0("Beeswarm_Plot_TMB_", group1, "_vs_", group2)
+    ### draw a plot with the data frame
+    ggplot(mdf, aes(x=Sample_Group, y=total)) +
+      ggtitle(fName) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes(color=Additional_Info), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Tumor Mutation Burden",
+           subtitle = paste(group1, "Mean:", signif(mean(df1$total), 4), ",", group2, "Mean:", signif(mean(df2$total), 4))) +
+      theme(legend.position="right", plot.title=element_text(hjust = 0.5), plot.subtitle=element_text(hjust = 0.5))
+    ggsave(filename = paste0(outputDir, "TMB/", group1, "_vs_", group2, "/", fName, ".png"), width = 15, height = 12)
+    
+    ### draw a beeswarm plot for TMB (missense only)
+    ### file name
+    fName <- paste0("Beeswarm_Plot_TMB_Missense_", group1, "_vs_", group2)
+    ### draw a plot with the data frame
+    ggplot(mdf, aes(x=Sample_Group, y=Missense_Mutation)) +
+      ggtitle(fName) +
+      theme_classic(base_size = 16) +
+      geom_boxplot() +
+      geom_beeswarm(aes(color=Additional_Info), na.rm = TRUE) +
+      stat_compare_means() +
+      labs(x = "", y = "Tumor Mutation Burden (Missense Only)",
+           subtitle = paste(group1, "Mean:", signif(mean(df1$Missense_Mutation), 4), ",", group2, "Mean:", signif(mean(df2$Missense_Mutation), 4))) +
+      theme(legend.position="right", plot.title=element_text(hjust = 0.5), plot.subtitle=element_text(hjust = 0.5))
+    ggsave(filename = paste0(outputDir, "TMB/", group1, "_vs_", group2, "/", fName, ".png"), width = 15, height = 12)
+    
+    ### write out the TMB table
+    write.xlsx2(data.frame(Sample_Name=rownames(mdf), mdf, stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(outputDir, "TMB/", group1, "_vs_", group2, "/", "TMB_Table_", group1, "_vs_", group2, ".xlsx"),
+                sheetName = "Tumor_Mutation_Burden", row.names = FALSE)
     
   }
   
-  
+  ### run mutation_analysis_for_comparison for each comparison
+  dir.create(paste0(outputDir, "TMB"))
+  dir.create(paste0(outputDir, "Driver_Genes"))
+  mutation_analysis_for_comparison("MSI-H_Young", "MSI-H_Old")
+  mutation_analysis_for_comparison("MSS_Young", "MSS_Old")
+  mutation_analysis_for_comparison("MSI-H_AA", "MSI-H_CC")
+  mutation_analysis_for_comparison("MSS_AA", "MSS_CC")
+  mutation_analysis_for_comparison("MSI-H_AA_Predicted", "MSI-H_CC_Predicted")
+  mutation_analysis_for_comparison("MSS_AA_Predicted", "MSS_CC_Predicted")
+  mutation_analysis_for_comparison("MSI-H_Young_Proximal", "MSI-H_Young_Distal")
+  mutation_analysis_for_comparison("MSS_Young_Proximal", "MSS_Young_Distal")
+  mutation_analysis_for_comparison("MSI-H_Old_Proximal", "MSI-H_Old_Distal")
+  mutation_analysis_for_comparison("MSS_Old_Proximal", "MSS_Old_Distal")
+  mutation_analysis_for_comparison("MSI-H_AA_Proximal", "MSI-H_AA_Distal")
+  mutation_analysis_for_comparison("MSS_AA_Proximal", "MSS_AA_Distal")
+  mutation_analysis_for_comparison("MSI-H_CC_Proximal", "MSI-H_CC_Distal")
+  mutation_analysis_for_comparison("MSS_CC_Proximal", "MSS_CC_Distal")
+  mutation_analysis_for_comparison("MSI-H_AA_Predicted_Proximal", "MSI-H_AA_Predicted_Distal")
+  mutation_analysis_for_comparison("MSS_AA_Predicted_Proximal", "MSS_AA_Predicted_Distal")
+  mutation_analysis_for_comparison("MSI-H_CC_Predicted_Proximal", "MSI-H_CC_Predicted_Distal")
+  mutation_analysis_for_comparison("MSS_CC_Predicted_Proximal", "MSS_CC_Predicted_Distal")
   
 }
