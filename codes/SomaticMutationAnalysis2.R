@@ -29,6 +29,11 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
                          outputDir="//isilon.c2b2.columbia.edu/ifs/archive/shares/bisr/Parvathi_Myer/results/somatic_mutation2/") {
   
   ### load libraries
+  options(java.parameters = "-Xmx8000m")
+  if(!require(xlsx, quietly = TRUE)) {
+    install.packages("xlsx")
+    require(xlsx, quietly = TRUE)
+  }
   if(!require(maftools, quietly = TRUE)) {
     if(!requireNamespace("BiocManager", quietly = TRUE))
       install.packages("BiocManager")
@@ -383,6 +388,10 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   ### get driver genes
   driver_genes <- oncodrive(maf = maf, AACol = "HGVSp_Short", minMut = 5)
   
+  ### write out the driver gene result
+  write.xlsx2(driver_genes, file = paste0(resultDir, "Driver_Genes_Table_Total.xlsx"),
+              sheetName = "Driver_Genes", row.names = FALSE)
+  
   ### if there are significant genes, draw a plot and perform pathway analysis
   if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
     ### driver gene plot
@@ -391,13 +400,34 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     dev.off()
     
     ### pathway analysis
-    pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(driver_genes$Hugo_Symbol),
+    pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(as.character(driver_genes$Hugo_Symbol)),
                                    org = "human", database = "GO", imgPrint = TRUE,
                                    title = "Driver_Genes_Pathways_Total",
                                    displayNum = 50, dir = resultDir)
-    write.xlsx2(pathways, file = paste0(resultDir, "Driver_Genes_Pathways_Total.xlsx"),
-                sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+    if(nrow(pathways) > 0) {
+      write.xlsx2(pathways, file = paste0(resultDir, "Driver_Genes_Pathways_Total.xlsx"),
+                  sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+    }
   }
+  
+  ### Total TMB
+  tmb_df <- maf@variant.classification.summary
+  tmb_df <- tmb_df[,-1]
+  tmb_df <- tmb_df / 40
+  rownames(tmb_df) <- maf@variant.classification.summary$Tumor_Sample_Barcode
+  tmb_df$MSI_Info <- clinInfo[substr(rownames(tmb_df), 1, 15), "NEW_MSI"]
+  tmb_df$Age_Info <- clinInfo[substr(rownames(tmb_df), 1, 15), "MSI_AGE_Status"]
+  tmb_df$Race_Info <- clinInfo[substr(rownames(tmb_df), 1, 15), "MSI_RACE_Status2"]
+  tmb_df$Survival <- clinInfo[substr(rownames(tmb_df), 1, 15), "Overall Survival (Months)"]
+  
+  ### write out the TMB table
+  write.xlsx2(data.frame(Sample_Name=rownames(tmb_df), tmb_df, stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(resultDir, "Tumor_Mutation_Burden_Total.xlsx"),
+              sheetName = "Tumor_Mutation_Burden", row.names = FALSE)
+  
+  ### Overall TMB summary variable
+  overall_tmb <- NULL
+  overall_tmb_mis <- NULL
   
   ### a function to compare TMB for given comparison
   ### for each group also perform summary_plot, driver_gene, and pathway analyses
@@ -408,39 +438,57 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     group2_maf <- read.maf(maf = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group2, ".maf"))
     
     ### run driver gene and pathway analyses for each group
-    ### group1
-    dir.create(paste0(outputDir, "Driver_Genes/", group1))
-    driver_genes <- oncodrive(maf = group1_maf, AACol = "HGVSp_Short", minMut = 5)
-    if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
-      ### driver gene plot
-      png(paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Plot_", group1, ".png"), width = 1200, height = 1000, res = 130)
-      plotOncodrive(res = driver_genes, fdrCutOff = driver_gene_fdr_cutoff, useFraction = TRUE)
-      dev.off()
+    ### group1 - run the below if there are at least 3 samples in the group
+    if(nrow(group1_maf@variants.per.sample) > 2) {
+      dir.create(paste0(outputDir, "Driver_Genes/", group1))
+      driver_genes <- oncodrive(maf = group1_maf, AACol = "HGVSp_Short", minMut = 5)
       
-      ### pathway analysis
-      pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(driver_genes$Hugo_Symbol),
-                                     org = "human", database = "GO", imgPrint = TRUE,
-                                     title = paste0("Driver_Genes_Pathways_", group1),
-                                     displayNum = 50, dir = paste0(outputDir, "Driver_Genes/", group1))
-      write.xlsx2(pathways, file = paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Pathways_", group1, ".xlsx"),
-                  sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+      ### write out the driver gene result
+      write.xlsx2(driver_genes, file = paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Table_", group1, ".xlsx"),
+                  sheetName = "Driver_Genes", row.names = FALSE)
+      
+      if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
+        ### driver gene plot
+        png(paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Plot_", group1, ".png"), width = 1200, height = 1000, res = 130)
+        plotOncodrive(res = driver_genes, fdrCutOff = driver_gene_fdr_cutoff, useFraction = TRUE)
+        dev.off()
+        
+        ### pathway analysis
+        pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(as.character(driver_genes$Hugo_Symbol)),
+                                       org = "human", database = "GO", imgPrint = TRUE,
+                                       title = paste0("Driver_Genes_Pathways_", group1),
+                                       displayNum = 50, dir = paste0(outputDir, "Driver_Genes/", group1, "/"))
+        if(nrow(pathways) > 0) {
+          write.xlsx2(pathways, file = paste0(outputDir, "Driver_Genes/", group1, "/Driver_Genes_Pathways_", group1, ".xlsx"),
+                      sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+        }
+      }
     }
-    ### group2
-    dir.create(paste0(outputDir, "Driver_Genes/", group2))
-    driver_genes <- oncodrive(maf = group2_maf, AACol = "HGVSp_Short", minMut = 5)
-    if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
-      ### driver gene plot
-      png(paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Plot_", group2, ".png"), width = 1200, height = 1000, res = 130)
-      plotOncodrive(res = driver_genes, fdrCutOff = driver_gene_fdr_cutoff, useFraction = TRUE)
-      dev.off()
+    ### group2 - run the below if there are at least 3 samples in the group
+    if(nrow(group2_maf@variants.per.sample) > 2) {
+      dir.create(paste0(outputDir, "Driver_Genes/", group2))
+      driver_genes <- oncodrive(maf = group2_maf, AACol = "HGVSp_Short", minMut = 5)
       
-      ### pathway analysis
-      pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(driver_genes$Hugo_Symbol),
-                                     org = "human", database = "GO", imgPrint = TRUE,
-                                     title = paste0("Driver_Genes_Pathways_", group2),
-                                     displayNum = 50, dir = paste0(outputDir, "Driver_Genes/", group2))
-      write.xlsx2(pathways, file = paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Pathways_", group2, ".xlsx"),
-                  sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+      ### write out the driver gene result
+      write.xlsx2(driver_genes, file = paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Table_", group2, ".xlsx"),
+                  sheetName = "Driver_Genes", row.names = FALSE)
+      
+      if(length(which(driver_genes$fdr < driver_gene_fdr_cutoff)) > 0) {
+        ### driver gene plot
+        png(paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Plot_", group2, ".png"), width = 1200, height = 1000, res = 130)
+        plotOncodrive(res = driver_genes, fdrCutOff = driver_gene_fdr_cutoff, useFraction = TRUE)
+        dev.off()
+        
+        ### pathway analysis
+        pathways <- pathwayAnalysis_CP(geneList = geneSymbolToEntrezId(as.character(driver_genes$Hugo_Symbol)),
+                                       org = "human", database = "GO", imgPrint = TRUE,
+                                       title = paste0("Driver_Genes_Pathways_", group2),
+                                       displayNum = 50, dir = paste0(outputDir, "Driver_Genes/", group2, "/"))
+        if(nrow(pathways) > 0) {
+          write.xlsx2(pathways, file = paste0(outputDir, "Driver_Genes/", group2, "/Driver_Genes_Pathways_", group2, ".xlsx"),
+                      sheetName = "Driver_Genes_Pathways", row.names = FALSE)
+        }
+      }
     }
     
     ### TMB
@@ -456,13 +504,23 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     df2 <- df2 / 40
     df2$Sample_Group <- group2
     rownames(df2) <- group2_maf@variant.classification.summary$Tumor_Sample_Barcode
-    mdf <- rbind(df1, df2)
+    mdf <- merge(df1, df2, all = TRUE, sort = FALSE)
+    mdf[is.na(mdf)] <- 0
     rownames(mdf) <- c(rownames(df1), rownames(df2))
     if(grepl("Old", group1) || grepl("Young", group2)) {
       mdf$Additional_Info <- clinInfo[substr(rownames(mdf), 1, 15), "MSI_RACE_Status2"]
     } else {
       mdf$Additional_Info <- clinInfo[substr(rownames(mdf), 1, 15), "MSI_AGE_Status"]
     }
+    mdf$Survival <- clinInfo[substr(rownames(mdf), 1, 15), "Overall Survival (Months)"]
+    
+    ### overall tmb
+    overall_tmb <- c(get("overall_tmb"), mean(df1$total), mean(df2$total))
+    overall_tmb_mis <- c(get("overall_tmb_mis"), mean(df1$Missense_Mutation), mean(df2$Missense_Mutation))
+    names(overall_tmb)[(length(overall_tmb)-1):length(overall_tmb)] <- c(group1, group2)
+    names(overall_tmb_mis)[(length(overall_tmb_mis)-1):length(overall_tmb_mis)] <- c(group1, group2)
+    assign("overall_tmb", overall_tmb, envir = globalenv())
+    assign("overall_tmb_mis", overall_tmb_mis, envir = globalenv())
     
     ### draw a beeswarm plot for TMB
     ### file name
@@ -499,6 +557,34 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
                 file = paste0(outputDir, "TMB/", group1, "_vs_", group2, "/", "TMB_Table_", group1, "_vs_", group2, ".xlsx"),
                 sheetName = "Tumor_Mutation_Burden", row.names = FALSE)
     
+    ### correlation between survival and TMB
+    if((length(which(mdf$Sample_Group == group1)) > 2) && (length(which(mdf$Sample_Group == group2)) > 2)) {
+      fName <- paste0("Correlation_Plot_TMB_Survival_", group1, "_vs_", group2)
+      colors <- c("skyblue", "pink")
+      names(colors) <- c(group1, group2)
+      png(paste0(outputDir, "TMB/", group1, "_vs_", group2, "/", fName, ".png"), width = 1500, height = 1200, res = 130)
+      par(oma = c(0,0,3,0))
+      plot(mdf$total, mdf$Survival, pch = 19,
+           col = colors[mdf$Sample_Group],
+           main = paste0(names(colors)[1], " P.Cor = ", round(cor(mdf$total[which(mdf$Sample_Group == names(colors)[1])],
+                                                                  mdf$Survival[which(mdf$Sample_Group == names(colors)[1])], use = "pairwise.complete.obs"), 5),
+                         ", p-value = ", signif(cor.test(mdf$total[which(mdf$Sample_Group == names(colors)[1])],
+                                                         mdf$Survival[which(mdf$Sample_Group == names(colors)[1])])$p.value, 5),
+                         "\n", names(colors)[2], " P.Cor = ", round(cor(mdf$total[which(mdf$Sample_Group == names(colors)[2])],
+                                                                        mdf$Survival[which(mdf$Sample_Group == names(colors)[2])], use = "pairwise.complete.obs"), 5),
+                         ", p-value = ", signif(cor.test(mdf$total[which(mdf$Sample_Group == names(colors)[2])],
+                                                         mdf$Survival[which(mdf$Sample_Group == names(colors)[2])])$p.value, 5)),
+           xlab = "Tumor Mutation Burden",
+           ylab = "Overall Survival (Months)")
+      abline(lm(mdf$Survival[which(mdf$Sample_Group == names(colors)[1])]~mdf$total[which(mdf$Sample_Group == names(colors)[1])]), col=colors[1], lwd=2)
+      abline(lm(mdf$Survival[which(mdf$Sample_Group == names(colors)[2])]~mdf$total[which(mdf$Sample_Group == names(colors)[2])]), col=colors[2], lwd=2)
+      legend("topright", legend = names(colors),
+             col = colors, pch = 19,
+             title = "Sample Groups", cex = 0.8)
+      mtext(fName, outer = TRUE, cex = 2)
+      dev.off()
+    }
+    
   }
   
   ### run mutation_analysis_for_comparison for each comparison
@@ -522,5 +608,11 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   mutation_analysis_for_comparison("MSS_AA_Predicted_Proximal", "MSS_AA_Predicted_Distal")
   mutation_analysis_for_comparison("MSI-H_CC_Predicted_Proximal", "MSI-H_CC_Predicted_Distal")
   mutation_analysis_for_comparison("MSS_CC_Predicted_Proximal", "MSS_CC_Predicted_Distal")
+  
+  ### write out the overall TMB result table
+  write.xlsx2(data.frame(Sample_Group=names(overall_tmb), TMB=overall_tmb, TMB_Missense=overall_tmb_mis,
+                         stringsAsFactors = FALSE, check.names = FALSE),
+              file = paste0(resultDir, "Tumor_Mutation_Burden_Total_Per_Group.xlsx"),
+              sheetName = "Tumor_Mutation_Burden", row.names = FALSE)
   
 }
