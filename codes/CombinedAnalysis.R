@@ -97,6 +97,9 @@ combAnalysis <- function(methylPath="//isilon.c2b2.columbia.edu/ifs/archive/shar
   clinInfo$MSI_RACE_Status2[intersect(which(clinInfo$MSI == "MSI-L"),
                                               which(clinInfo$Prediction_Filtered == "Caucasian"))] <- "MSS_CC"
   
+  ### remove POLE-muated samples
+  clinicalInfo_640 <- clinicalInfo_640[-which(clinicalInfo_640$POLE_MUTANT == TRUE),]
+  
   ### load the data
   load(methylRDAPath)
   load(rnaseqRDAPath)
