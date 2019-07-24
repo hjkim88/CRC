@@ -1331,13 +1331,211 @@ dma2 <- function(preprocessedBetaPath="//isilon.c2b2.columbia.edu/ifs/archive/sh
     }
   }
   
+  ### set sample groups for DMA - global age: Young vs Old
+  grp <- clinicalInfo_640[colnames(normB$beta),"Diagnosis Age"]
+  tIdx1 <- which(grp < 50)
+  tIdx2 <- which(grp >= 50)
+  tIdx3 <- which(is.na(grp))
+  grp[tIdx1] <- "YOUNG"
+  grp[tIdx2] <- "OLD"
+  grp[tIdx3] <- "NOTHING"
+  ### differentially methylated positions
+  dmps <- champ.DMP(beta = normB$beta, pheno = grp, compare.group = c("YOUNG", "OLD"),
+                    adjPVal = pvalThreshold, adjust.method = "BH", arraytype = "450K")[[1]]
+  write.xlsx2(data.frame(CpG_Site=rownames(dmps), dmps),
+              file = paste0(outputDir, "DMPs_Young_vs_Old.xlsx"),
+              sheetName = "DMPs", row.names = FALSE)
+  ### pathway analysis with the DMPs
+  dm_genes <- as.character(dmps$gene)
+  dm_genes <- dm_genes[which(dm_genes != "")]
+  dm_genes <- gs2eg[dm_genes]
+  dm_genes <- dm_genes[which(!is.na(dm_genes))]
+  pathways <- pathwayAnalysis_CP(geneList = dm_genes, org = "human", database = "GO", imgPrint = TRUE,
+                                 title = "Top_50_DMG-associated_Pathways_Young_vs_Old",
+                                 displayNum = 50, dir = outputDir)
+  write.xlsx2(pathways, file = paste0(outputDir, "go_DMG-associated_Pathways_Young_vs_Old.xlsx"),
+              sheetName = "DMG-associated_Pathways", row.names = FALSE)
+  ### DMRCate and plots
+  ### make a design matrix
+  design <- model.matrix(~0+grp)
+  colnames(design) <- levels(as.factor(grp))
+  ### make a contrast matrix
+  contrastMat <- makeContrasts(YOUNG-OLD,
+                               levels = design)
+  ### annotation for DMR(Differentially Methylated Region)s
+  myAnno <- cpg.annotate(object = normB$beta, datatype = "array", what = "Beta",
+                         arraytype = "450K", fdr = pvalThreshold,
+                         annotation=c(array = "IlluminaHumanMethylation450k", annotation = "ilmn12.hg19"),
+                         analysis.type = "differential", design = design,
+                         contrasts = TRUE, cont.matrix = contrastMat,
+                         coef = "YOUNG - OLD")
+  ### get DMRs and save
+  if(length(which(myAnno$is.sig == TRUE)) > 0) {
+    ### get DMRs
+    DMRs <- dmrcate(myAnno, lambda=1000, C=2)
+    ### extract ranges from DMRs
+    results.ranges <- extractRanges(DMRs, genome = "hg19")
+    ### filter with Stouffer combined p-values and save the DMR info
+    if(length(results.ranges) > 0) {
+      results.ranges <- results.ranges[which(results.ranges$Stouffer < pvalThreshold),]
+      results.ranges <- results.ranges[which(results.ranges$no.cpgs > cpg_cutoff)]
+      write.xlsx2(data.frame(DMR=paste0(rep("DMR", length(results.ranges)), 1:length(results.ranges)), results.ranges),
+                  file = paste0(outputDir, "DMRs_Young_vs_Old.xlsx"),
+                  sheetName = "DMRs", row.names = FALSE)
+      idx <- union(which(grp == "YOUNG"), which(grp == "OLD"))
+      pheno <- c("skyblue", "pink")
+      names(pheno) <- c("YOUNG", "OLD")
+      cols <- pheno[grp]
+      min_num <- min(dmrPrintSampleNum, min(length(which(cols[idx] == pheno[1])), length(which(cols[idx] == pheno[2]))))
+      set.seed(1234)
+      for(i in 1:min(dmrPrintNum, length(results.ranges))) {
+        png(paste0(outputDir, "DMR", i, "_Young_vs_Old.png"), width = 1800, height = 1000)
+        DMR.plot(ranges=results.ranges, dmr=i, CpGs=normB$beta[,idx], phen.col=cols[idx], what = "Beta",
+                 arraytype = "450K", pch=19, toscale=TRUE, plotmedians=TRUE, genome="hg19",
+                 samps = union(sample(which(cols[idx] == pheno[1]), min_num),
+                               sample(which(cols[idx] == pheno[2]), min_num)))
+        dev.off()
+      }
+    }
+  }
+  
+  ### set sample groups for DMA - global race: AA vs CC (self-reported)
+  grp <- clinicalInfo_640[colnames(normB$beta),"Race Category"]
+  grp[which(grp == "BLACK OR AFRICAN AMERICAN")] <- "AA"
+  grp[which(grp == "WHITE")] <- "CC"
+  grp[which(is.na(grp))] <- "NOTHING"
+  ### differentially methylated positions
+  dmps <- champ.DMP(beta = normB$beta, pheno = grp, compare.group = c("AA", "CC"),
+                    adjPVal = pvalThreshold, adjust.method = "BH", arraytype = "450K")[[1]]
+  write.xlsx2(data.frame(CpG_Site=rownames(dmps), dmps),
+              file = paste0(outputDir, "DMPs_AA_vs_CC.xlsx"),
+              sheetName = "DMPs", row.names = FALSE)
+  ### pathway analysis with the DMPs
+  dm_genes <- as.character(dmps$gene)
+  dm_genes <- dm_genes[which(dm_genes != "")]
+  dm_genes <- gs2eg[dm_genes]
+  dm_genes <- dm_genes[which(!is.na(dm_genes))]
+  pathways <- pathwayAnalysis_CP(geneList = dm_genes, org = "human", database = "GO", imgPrint = TRUE,
+                                 title = "Top_50_DMG-associated_Pathways_AA_vs_CC",
+                                 displayNum = 50, dir = outputDir)
+  write.xlsx2(pathways, file = paste0(outputDir, "go_DMG-associated_Pathways_AA_vs_CC.xlsx"),
+              sheetName = "DMG-associated_Pathways", row.names = FALSE)
+  ### DMRCate and plots
+  ### make a design matrix
+  design <- model.matrix(~0+grp)
+  colnames(design) <- levels(as.factor(grp))
+  ### make a contrast matrix
+  contrastMat <- makeContrasts(AA-CC,
+                               levels = design)
+  ### annotation for DMR(Differentially Methylated Region)s
+  myAnno <- cpg.annotate(object = normB$beta, datatype = "array", what = "Beta",
+                         arraytype = "450K", fdr = pvalThreshold,
+                         annotation=c(array = "IlluminaHumanMethylation450k", annotation = "ilmn12.hg19"),
+                         analysis.type = "differential", design = design,
+                         contrasts = TRUE, cont.matrix = contrastMat,
+                         coef = "AA - CC")
+  ### get DMRs and save
+  if(length(which(myAnno$is.sig == TRUE)) > 0) {
+    ### get DMRs
+    DMRs <- dmrcate(myAnno, lambda=1000, C=2)
+    ### extract ranges from DMRs
+    results.ranges <- extractRanges(DMRs, genome = "hg19")
+    ### filter with Stouffer combined p-values and save the DMR info
+    if(length(results.ranges) > 0) {
+      results.ranges <- results.ranges[which(results.ranges$Stouffer < pvalThreshold),]
+      results.ranges <- results.ranges[which(results.ranges$no.cpgs > cpg_cutoff)]
+      write.xlsx2(data.frame(DMR=paste0(rep("DMR", length(results.ranges)), 1:length(results.ranges)), results.ranges),
+                  file = paste0(outputDir, "DMRs_AA_vs_CC.xlsx"),
+                  sheetName = "DMRs", row.names = FALSE)
+      idx <- union(which(grp == "AA"), which(grp == "CC"))
+      pheno <- c("skyblue", "pink")
+      names(pheno) <- c("AA", "CC")
+      cols <- pheno[grp]
+      min_num <- min(dmrPrintSampleNum, min(length(which(cols[idx] == pheno[1])), length(which(cols[idx] == pheno[2]))))
+      set.seed(1234)
+      for(i in 1:min(dmrPrintNum, length(results.ranges))) {
+        png(paste0(outputDir, "DMR", i, "_AA_vs_CC.png"), width = 1800, height = 1000)
+        DMR.plot(ranges=results.ranges, dmr=i, CpGs=normB$beta[,idx], phen.col=cols[idx], what = "Beta",
+                 arraytype = "450K", pch=19, toscale=TRUE, plotmedians=TRUE, genome="hg19",
+                 samps = union(sample(which(cols[idx] == pheno[1]), min_num),
+                               sample(which(cols[idx] == pheno[2]), min_num)))
+        dev.off()
+      }
+    }
+  }
+  
+  ### set sample groups for DMA - global race: AA vs CC (predicted)
+  grp <- clinicalInfo_640[colnames(normB$beta),"Prediction_Filtered"]
+  grp[which(grp == "African")] <- "AA"
+  grp[which(grp == "Caucasian")] <- "CC"
+  grp[which(is.na(grp))] <- "NOTHING"
+  ### differentially methylated positions
+  dmps <- champ.DMP(beta = normB$beta, pheno = grp, compare.group = c("AA", "CC"),
+                    adjPVal = pvalThreshold, adjust.method = "BH", arraytype = "450K")[[1]]
+  write.xlsx2(data.frame(CpG_Site=rownames(dmps), dmps),
+              file = paste0(outputDir, "DMPs_AA_vs_CC_predicted.xlsx"),
+              sheetName = "DMPs", row.names = FALSE)
+  ### pathway analysis with the DMPs
+  dm_genes <- as.character(dmps$gene)
+  dm_genes <- dm_genes[which(dm_genes != "")]
+  dm_genes <- gs2eg[dm_genes]
+  dm_genes <- dm_genes[which(!is.na(dm_genes))]
+  pathways <- pathwayAnalysis_CP(geneList = dm_genes, org = "human", database = "GO", imgPrint = TRUE,
+                                 title = "Top_50_DMG-associated_Pathways_AA_vs_CC_predicted",
+                                 displayNum = 50, dir = outputDir)
+  write.xlsx2(pathways, file = paste0(outputDir, "go_DMG-associated_Pathways_AA_vs_CC_predicted.xlsx"),
+              sheetName = "DMG-associated_Pathways", row.names = FALSE)
+  ### DMRCate and plots
+  ### make a design matrix
+  design <- model.matrix(~0+grp)
+  colnames(design) <- levels(as.factor(grp))
+  ### make a contrast matrix
+  contrastMat <- makeContrasts(AA-CC,
+                               levels = design)
+  ### annotation for DMR(Differentially Methylated Region)s
+  myAnno <- cpg.annotate(object = normB$beta, datatype = "array", what = "Beta",
+                         arraytype = "450K", fdr = pvalThreshold,
+                         annotation=c(array = "IlluminaHumanMethylation450k", annotation = "ilmn12.hg19"),
+                         analysis.type = "differential", design = design,
+                         contrasts = TRUE, cont.matrix = contrastMat,
+                         coef = "AA - CC")
+  ### get DMRs and save
+  if(length(which(myAnno$is.sig == TRUE)) > 0) {
+    ### get DMRs
+    DMRs <- dmrcate(myAnno, lambda=1000, C=2)
+    ### extract ranges from DMRs
+    results.ranges <- extractRanges(DMRs, genome = "hg19")
+    ### filter with Stouffer combined p-values and save the DMR info
+    if(length(results.ranges) > 0) {
+      results.ranges <- results.ranges[which(results.ranges$Stouffer < pvalThreshold),]
+      results.ranges <- results.ranges[which(results.ranges$no.cpgs > cpg_cutoff)]
+      write.xlsx2(data.frame(DMR=paste0(rep("DMR", length(results.ranges)), 1:length(results.ranges)), results.ranges),
+                  file = paste0(outputDir, "DMRs_AA_vs_CC_predicted.xlsx"),
+                  sheetName = "DMRs", row.names = FALSE)
+      idx <- union(which(grp == "AA"), which(grp == "CC"))
+      pheno <- c("skyblue", "pink")
+      names(pheno) <- c("AA", "CC")
+      cols <- pheno[grp]
+      min_num <- min(dmrPrintSampleNum, min(length(which(cols[idx] == pheno[1])), length(which(cols[idx] == pheno[2]))))
+      set.seed(1234)
+      for(i in 1:min(dmrPrintNum, length(results.ranges))) {
+        png(paste0(outputDir, "DMR", i, "_AA_vs_CC_predicted.png"), width = 1800, height = 1000)
+        DMR.plot(ranges=results.ranges, dmr=i, CpGs=normB$beta[,idx], phen.col=cols[idx], what = "Beta",
+                 arraytype = "450K", pch=19, toscale=TRUE, plotmedians=TRUE, genome="hg19",
+                 samps = union(sample(which(cols[idx] == pheno[1]), min_num),
+                               sample(which(cols[idx] == pheno[2]), min_num)))
+        dev.off()
+      }
+    }
+  }
+  
   
   ### write out the normalized beta table
   write.table(data.frame(CpG_site=rownames(normB$beta), normB$beta,
                          stringsAsFactors = FALSE, check.names = FALSE),
               file = paste0(outputDir, "norm_beta_tcga_coad_read.txt"),
               sep = "\t", row.names = FALSE)
-
+  
   
   ### generate QC plots with the normalized beta
   png(paste0(outputDir, "BMIQ_beta_qc_plots.png"), width = 2000, height = 1000, res = 120)
