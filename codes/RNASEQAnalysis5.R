@@ -174,7 +174,18 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
     deresults <- deresults[order(deresults$padj, na.last = TRUE), ,drop = FALSE]
     deresults <- deresults[deresults$padj <= thresh, ,drop = FALSE]
     
-    return(data.frame(deresults))
+    ### add baseMean for each group
+    nCnt <- counts(dea, normalized=TRUE, replaced=TRUE)
+    exp_rowMeans <- apply(nCnt[,which(Coldata$sampleType == exp_class), drop=FALSE], 1, mean)
+    ctrl_rowMeans <- apply(nCnt[,which(Coldata$sampleType == ctrl_class), drop=FALSE], 1, mean)
+    deresults <- data.frame(baseMean=deresults[,1],
+                            V1=exp_rowMeans[rownames(deresults)],
+                            V2=ctrl_rowMeans[rownames(deresults)],
+                            deresults[,2:6],
+                            stringsAsFactors = FALSE, check.names = FALSE)
+    colnames(deresults)[2:3] <- c(paste0("baseMean_", exp_class), paste0("baseMean_", ctrl_class))
+    
+    return(deresults)
   }
   
   ### A function to print volcano plot of DE analysis with DESeq2 result
@@ -199,9 +210,47 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
     ggsave(filename = outputFilePath)
   }
   
+  ### a function to perform RNA-Seq analysis (MDS plot, DEA, volcano plot) with given input
+  rnaseq_analysis <- function(target_idx, grp, exp_class, ctrl_class, fileName) {
+    
+    ### create a directory
+    dir.create(paste0(outputDir, fileName))
+    
+    ### run DE analysis
+    deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
+                                     exp_class = exp_class, ctrl_class = ctrl_class,
+                                     bat_eff = NULL, thresh = 1)
+    
+    ### write out the DE result table, draw a volcano plot, and perform pathway analysis
+    write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
+                file = paste0(outputDir, fileName, "/deresult_", fileName, ".xlsx"),
+                sheetName = fileName, row.names = FALSE)
+    volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, fileName, "/volplot_", fileName, ".png"), pvalue = padj_thres)
+    
+    ### QC - MDS plots
+    normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
+    
+    ### select the top genes for MDS using limma
+    png(paste0(outputDir, fileName, "/mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
+    par(mfrow=c(1,2))
+    colors = rainbow(length(unique(as.character(grp))))
+    names(colors) = unique(as.character(grp))
+    plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
+            xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
+    legend("topright", legend = unique(as.character(grp)),
+           col = colors[unique(as.character(grp))], pch = 19,
+           title = "Sample Groups", cex = 0.7)
+    plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
+            xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
+    legend("topright", legend = unique(as.character(grp)),
+           col = colors[unique(as.character(grp))], pch = 19,
+           title = "Sample Groups", cex = 0.7)
+    dev.off()
+    
+  }
+  
   
   ### MSI-H: Young vs Old
-  
   ### set group info
   target_idx <- union(which(clinicalInfo_640$MSI_AGE_Status == "MSI-H_Young"),
                       which(clinicalInfo_640$MSI_AGE_Status == "MSI-H_Old"))
@@ -213,81 +262,20 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
       return(x)
     }
   }, USE.NAMES = FALSE)
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "MSI_H_Young", ctrl_class = "MSI_H_Old",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_Young_vs_Old"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  grp <- clinicalInfo_640$MSI_AGE_Status[target_idx]
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "MSI_H_Young", "MSI_H_Old", "MSI-H_Young_vs_Old")
   
   
   ### MSS: Young vs Old
-  
   ### set group info
   target_idx <- union(which(clinicalInfo_640$MSI_AGE_Status == "MSS_Young"),
                       which(clinicalInfo_640$MSI_AGE_Status == "MSS_Old"))
   grp <- clinicalInfo_640$MSI_AGE_Status[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "MSS_Young", ctrl_class = "MSS_Old",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_Young_vs_Old"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "MSS_Young", "MSS_Old", "MSS_Young_vs_Old")
   
   
   ### MSI-H: AA vs CC
-  
   ### set group info
   target_idx <- union(which(clinicalInfo_640$MSI_RACE_Status1 == "MSI-H_AA"),
                       which(clinicalInfo_640$MSI_RACE_Status1 == "MSI-H_CC"))
@@ -299,81 +287,20 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
       return(x)
     }
   }, USE.NAMES = FALSE)
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "MSI_H_AA", ctrl_class = "MSI_H_CC",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_AA_vs_CC"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  grp <- clinicalInfo_640$MSI_RACE_Status1[target_idx]
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "MSI_H_AA", "MSI_H_CC", "MSI-H_AA_vs_CC")
   
   
   ### MSS: AA vs CC
-  
   ### set group info
   target_idx <- union(which(clinicalInfo_640$MSI_RACE_Status1 == "MSS_AA"),
                       which(clinicalInfo_640$MSI_RACE_Status1 == "MSS_CC"))
   grp <- clinicalInfo_640$MSI_RACE_Status1[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "MSS_AA", ctrl_class = "MSS_CC",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_AA_vs_CC"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "MSS_AA", "MSS_CC", "MSS_AA_vs_CC")
   
   
   ### MSI-H: AA vs CC based on the predicted values
-  
   ### set group info
   target_idx <- union(which(clinicalInfo_640$MSI_RACE_Status2 == "MSI-H_AA"),
                       which(clinicalInfo_640$MSI_RACE_Status2 == "MSI-H_CC"))
@@ -385,556 +312,171 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
       return(x)
     }
   }, USE.NAMES = FALSE)
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "MSI_H_AA", ctrl_class = "MSI_H_CC",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_AA_vs_CC_predicted"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  grp <- clinicalInfo_640$MSI_RACE_Status2[target_idx]
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "MSI_H_AA", "MSI_H_CC", "MSI-H_AA_vs_CC_predicted")
   
   
   ### MSS: AA vs CC based on the predicted values
-  
   ### set group info
   target_idx <- union(which(clinicalInfo_640$MSI_RACE_Status2 == "MSS_AA"),
                       which(clinicalInfo_640$MSI_RACE_Status2 == "MSS_CC"))
   grp <- clinicalInfo_640$MSI_RACE_Status2[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "MSS_AA", ctrl_class = "MSS_CC",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_AA_vs_CC_predicted"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "MSS_AA", "MSS_CC", "MSS_AA_vs_CC_predicted")
   
   
   ### MSI-H & Young - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_AGE_Status == "MSI-H_Young"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_Young_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSI-H_Young_Proximal_vs_Distal")
   
   
   ### MSI-H & Old - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_AGE_Status == "MSI-H_Old"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_Old_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSI-H_Old_Proximal_vs_Distal")
   
   
   ### MSS & Young - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_AGE_Status == "MSS_Young"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_Young_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSS_Young_Proximal_vs_Distal")
   
   
   ### MSS & Old - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_AGE_Status == "MSS_Old"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_Old_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSS_Old_Proximal_vs_Distal")
   
   
   ### MSI-H & AA - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status1 == "MSI-H_AA"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_AA_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSI-H_AA_Proximal_vs_Distal")
   
   
   ### MSI-H & CC - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status1 == "MSI-H_CC"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_CC_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSI-H_CC_Proximal_vs_Distal")
   
   
   ### MSS & AA - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status1 == "MSS_AA"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_AA_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSS_AA_Proximal_vs_Distal")
   
   
   ### MSS & CC - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status1 == "MSS_CC"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_CC_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSS_CC_Proximal_vs_Distal")
   
   
   ### MSI-H & AA_predicted - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status2 == "MSI-H_AA"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_AA_predicted_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSI-H_AA_predicted_Proximal_vs_Distal")
   
   
   ### MSI-H & CC_predicted - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status2 == "MSI-H_CC"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSI-H_CC_predicted_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSI-H_CC_predicted_Proximal_vs_Distal")
   
   
   ### MSS & AA_predicted - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status2 == "MSS_AA"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
-  
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
-  
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_AA_predicted_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
-  
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
-  
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSS_AA_predicted_Proximal_vs_Distal")
   
   
   ### MSS & CC_predicted - Proximal vs Distal
-  
   ### set group info
   target_idx <- intersect(union(which(clinicalInfo_640$TUMOR_LOCATION == "Proximal"),
                                 which(clinicalInfo_640$TUMOR_LOCATION == "Distal")),
                           which(clinicalInfo_640$MSI_RACE_Status2 == "MSS_CC"))
   grp <- clinicalInfo_640$TUMOR_LOCATION[target_idx]
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Proximal", "Distal", "MSS_CC_predicted_Proximal_vs_Distal")
   
-  ### run DE analysis
-  deresult <- deseqWithComparisons(rCnt = raw_count_tcga_coad_read[,target_idx], grp = grp,
-                                   exp_class = "Proximal", ctrl_class = "Distal",
-                                   bat_eff = NULL, thresh = 1)
   
-  ### write out the DE result table, draw a volcano plot, and perform pathway analysis
-  fileName <- "MSS_CC_predicted_Proximal_vs_Distal"
-  write.xlsx2(data.frame(Gene_Symbol=rownames(deresult), deresult, stringsAsFactors = FALSE, check.names = FALSE),
-              file = paste0(outputDir, "deresult_", fileName, ".xlsx"), sheetName = fileName, row.names = FALSE)
-  volPlotWithDeseq(deresult, outputFilePath = paste0(outputDir, "volplot_", fileName, ".png"), pvalue = padj_thres)
+  ### Global: Young vs Old
+  ### set group info
+  target_idx <- union(which(clinicalInfo_640$`Diagnosis Age` < 50),
+                      which(clinicalInfo_640$`Diagnosis Age` >= 50))
+  grp <- clinicalInfo_640$`Diagnosis Age`[target_idx]
+  tIdx1 <- which(grp < 50)
+  tIdx2 <- which(grp >= 50)
+  grp[tIdx1] <- "Young"
+  grp[tIdx2] <- "Old"
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "Young", "Old", "Young_vs_Old")
   
-  ### QC - MDS plots
-  normCnt <- normalizeRNASEQwithVST(raw_count_tcga_coad_read[,target_idx])
   
-  ### select the top genes for MDS using limma
-  png(paste0(outputDir, "mdsplot_", fileName, ".png"), width = 2000, height = 1000, res = 130)
-  par(mfrow=c(1,2))
-  colors = rainbow(length(unique(as.character(grp))))
-  names(colors) = unique(as.character(grp))
-  plotMDS(normCnt, top = 500, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_500"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  plotMDS(normCnt, top = 2000, pch = 19, col = colors[as.character(grp)],
-          xlab = "Dimension1", ylab = "Dimension2", main = paste0(fileName, "_2000"))
-  legend("topright", legend = unique(as.character(grp)),
-         col = colors[unique(as.character(grp))], pch = 19,
-         title = "Sample Groups", cex = 0.7)
-  dev.off()
+  ### Global: AA vs CC (self-reported)
+  ### set group info
+  target_idx <- union(which(clinicalInfo_640$`Race Category` == "BLACK OR AFRICAN AMERICAN"),
+                      which(clinicalInfo_640$`Race Category` == "WHITE"))
+  grp <- clinicalInfo_640$`Race Category`[target_idx]
+  grp[which(grp == "BLACK OR AFRICAN AMERICAN")] <- "AA"
+  grp[which(grp == "WHITE")] <- "CC"
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "AA", "CC", "AA_vs_CC")
+  
+  
+  ### Global: AA vs CC (predicted)
+  ### set group info
+  target_idx <- union(which(clinicalInfo_640$Prediction_Filtered == "African"),
+                      which(clinicalInfo_640$Prediction_Filtered == "Caucasian"))
+  grp <- clinicalInfo_640$Prediction_Filtered[target_idx]
+  grp[which(grp == "African")] <- "AA"
+  grp[which(grp == "Caucasian")] <- "CC"
+  ### run the rnaseq function
+  rnaseq_analysis(target_idx, grp,  "AA", "CC", "AA_vs_CC_predicted")
   
 }
