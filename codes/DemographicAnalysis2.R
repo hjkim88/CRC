@@ -402,6 +402,11 @@ demoAnalysis2 <- function(clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/arc
     new_df$Status <- as.numeric(new_df$Status)
     fit <- survfit(as.formula(paste("Surv(Survival, Status)", "~", colName)), data = new_df)
     
+    ### additional
+    # new_df <- new_df[union(which(new_df$MSI_RACE_Status2 == "MSS_AA"),
+    #                        which(new_df$MSI_RACE_Status2 == "MSS_CC")),]
+    # fit <- survfit(as.formula(paste("Surv(Survival, Status)", "~", colName)), data = new_df)
+    
     if(length(which(fit$n < 2)) > 0) {
       p6 <- ggsurvplot(
         fit,
@@ -454,6 +459,12 @@ demoAnalysis2 <- function(clinInfoPath_640 = "//isilon.c2b2.columbia.edu/ifs/arc
       stat_compare_means() +
       labs(x = "", y = "Survival (Months)") +
       theme(legend.position="top")
+    
+    # ### additional
+    # g3 <- arrangeGrob(p6$plot, p6$table, p6$ncensor.plot,
+    #                   layout_matrix = rbind(c(1, 1), c(1, 1), c(1, 1), c(2, 2), c(3, 3)),
+    #                   top = paste0("Survival Differences between MSS AA vs CC"))
+    # ggsave(file = paste0(outputDir, "/demo_MSS_AA_vs_CC_survival.png"), g3, width = 10, height = 8, dpi = 300)
     
     ### arrange the plots and print out
     g3 <- arrangeGrob(p6$plot, p6$table, p6$ncensor.plot, p7,

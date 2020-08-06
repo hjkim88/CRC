@@ -46,18 +46,6 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     BiocManager::install("org.Hs.eg.db", version = "3.8")
     require(org.Hs.eg.db, quietly = TRUE)
   }
-  if(!require(org.Hs.eg.db, quietly = TRUE)) {
-    if(!requireNamespace("BiocManager", quietly = TRUE))
-      install.packages("BiocManager")
-    BiocManager::install("org.Hs.eg.db", version = "3.8")
-    require(org.Hs.eg.db, quietly = TRUE)
-  }
-  if(!require(org.Hs.eg.db, quietly = TRUE)) {
-    if(!requireNamespace("BiocManager", quietly = TRUE))
-      install.packages("BiocManager")
-    BiocManager::install("org.Hs.eg.db", version = "3.8")
-    require(org.Hs.eg.db, quietly = TRUE)
-  }
   if(!require(ggplot2, quietly = TRUE)) {
     install.packages("ggplot2")
     require(ggplot2, quietly = TRUE)
@@ -112,6 +100,19 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   ### msi status Indeterminate -> NA
   clinInfo$NEW_MSI[which(clinInfo$NEW_MSI == "Indeterminate")] <- NA
   
+  ### add age categorical info (Old/Young)
+  clinInfo$Age <- NA
+  clinInfo$Age[which(clinInfo$`Diagnosis Age` >= 50)] <- "Old"
+  clinInfo$Age[which(clinInfo$`Diagnosis Age` < 50)] <- "Young"
+  
+  ### add race categorical info
+  clinInfo$Self_Reported_Race <- NA
+  clinInfo$Self_Reported_Race[which(clinInfo$`Race Category` == "BLACK OR AFRICAN AMERICAN")] <- "AA"
+  clinInfo$Self_Reported_Race[which(clinInfo$`Race Category` == "WHITE")] <- "CC"
+  clinInfo$Predicted_Race <- NA
+  clinInfo$Predicted_Race[which(clinInfo$Prediction_Filtered == "African")] <- "AA"
+  clinInfo$Predicted_Race[which(clinInfo$Prediction_Filtered == "Caucasian")] <- "CC"
+  
   ### load MAF file with read.table
   maf_table <- read.table(file = mafFilePath, header = TRUE, sep = "\t", quote = "",
                           stringsAsFactors = FALSE, check.names = FALSE)
@@ -129,7 +130,13 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     sp <- strsplit(group, "_", fixed = TRUE)[[1]]
     
     ### get maf for the specific group
-    if((sp[length(sp)] == "Young") || (sp[length(sp)] == "Old")) {
+    if((group == "Young") || (group == "Old")) {
+      new_maf_table <- maf_table[which(substr(maf_table$Tumor_Sample_Barcode, 1, 15) %in% rownames(clinInfo[which(clinInfo$Age == group),])),]
+    } else if((group == "AA") || (group == "CC")) {
+      new_maf_table <- maf_table[which(substr(maf_table$Tumor_Sample_Barcode, 1, 15) %in% rownames(clinInfo[which(clinInfo$Self_Reported_Race == group),])),]
+    } else if((group == "AA_Predicted") || (group == "CC_Predicted")) {
+      new_maf_table <- maf_table[which(substr(maf_table$Tumor_Sample_Barcode, 1, 15) %in% rownames(clinInfo[which(clinInfo$Predicted_Race == sp[1]),])),]
+    } else if((sp[length(sp)] == "Young") || (sp[length(sp)] == "Old")) {
       new_maf_table <- maf_table[which(substr(maf_table$Tumor_Sample_Barcode, 1, 15) %in% rownames(clinInfo[which(clinInfo$MSI_AGE_Status == group),])),]
     } else if((sp[length(sp)] == "AA") || (sp[length(sp)] == "CC")) {
       new_maf_table <- maf_table[which(substr(maf_table$Tumor_Sample_Barcode, 1, 15) %in% rownames(clinInfo[which(clinInfo$MSI_RACE_Status1 == group),])),]
@@ -188,6 +195,12 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   specific_maf_file("MSI-H_CC_Predicted_Distal")
   specific_maf_file("MSS_AA_Predicted_Distal")
   specific_maf_file("MSS_CC_Predicted_Distal")
+  specific_maf_file("Young")
+  specific_maf_file("Old")
+  specific_maf_file("AA")
+  specific_maf_file("CC")
+  specific_maf_file("AA_Predicted")
+  specific_maf_file("CC_Predicted")
   
   
   # Create variables to be used by the methods that map back and forth betweer symbols 
@@ -437,6 +450,14 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     group1_maf <- read.maf(maf = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group1, ".maf"))
     group2_maf <- read.maf(maf = paste0(outputDir, "somatic_mutation_maf_tcga_coad_read_filtered_", group2, ".maf"))
     
+    ### summary plot for each group
+    png(paste0(outputDir, "Summary/Summary_Plot_", group1, ".png"), width = 2000, height = 1000, res = 200)
+    plotmafSummary(maf = group1_maf, rmOutlier = TRUE, addStat = "median", dashboard = TRUE, titvRaw = FALSE)
+    dev.off()
+    png(paste0(outputDir, "Summary/Summary_Plot_", group2, ".png"), width = 2000, height = 1000, res = 200)
+    plotmafSummary(maf = group2_maf, rmOutlier = TRUE, addStat = "median", dashboard = TRUE, titvRaw = FALSE)
+    dev.off()
+    
     ### run driver gene and pathway analyses for each group
     ### group1 - run the below if there are at least 3 samples in the group
     if(nrow(group1_maf@variants.per.sample) > 2) {
@@ -588,6 +609,7 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   }
   
   ### run mutation_analysis_for_comparison for each comparison
+  dir.create(paste0(outputDir, "Summary"))
   dir.create(paste0(outputDir, "TMB"))
   dir.create(paste0(outputDir, "Driver_Genes"))
   mutation_analysis_for_comparison("MSI-H_Young", "MSI-H_Old")
@@ -608,6 +630,9 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   mutation_analysis_for_comparison("MSS_AA_Predicted_Proximal", "MSS_AA_Predicted_Distal")
   mutation_analysis_for_comparison("MSI-H_CC_Predicted_Proximal", "MSI-H_CC_Predicted_Distal")
   mutation_analysis_for_comparison("MSS_CC_Predicted_Proximal", "MSS_CC_Predicted_Distal")
+  mutation_analysis_for_comparison("Young", "Old")
+  mutation_analysis_for_comparison("AA", "CC")
+  mutation_analysis_for_comparison("AA_Predicted", "CC_Predicted")
   
   ### write out the overall TMB result table
   write.xlsx2(data.frame(Sample_Group=names(overall_tmb), TMB=overall_tmb, TMB_Missense=overall_tmb_mis,

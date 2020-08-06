@@ -56,6 +56,12 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
     install.packages("gridExtra")
     require(gridExtra, quietly = TRUE)
   }
+  if(!require(ComplexHeatmap, quietly = TRUE)) {
+    if(!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("ComplexHeatmap", version = "3.8")
+    require(ComplexHeatmap, quietly = TRUE)
+  }
   
   ### load the data
   load(rCntPath)
@@ -152,8 +158,9 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
     
     ### load library
     if(!require(DESeq2, quietly = TRUE)) {
-      source("https://bioconductor.org/biocLite.R")
-      biocLite("DESeq2")
+      if(!requireNamespace("BiocManager", quietly = TRUE))
+        install.packages("BiocManager")
+      BiocManager::install("DESeq2")
       require(DESeq2, quietly = TRUE)
     }
     
@@ -669,9 +676,7 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
   legend("topright", inset = -0.02, xpd = TRUE, title = "The 5 Horizontal Bars", legend = c("Tumor Location", "Predicted Race", "Self-reported Race", "Age", "MSI Status"), fill = "white", cex = 0.7, box.lty = 1)
   dev.off()
   
-  
   ### beeswarm plot
-  
   mcp_beeswarm <- function(group) {
     ### make an empty plot list
     p <- vector("list", length = nrow(mcp_result))
@@ -684,6 +689,10 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
       
       ### remove NA rows in the group
       plot_df <- plot_df[which(plot_df$Sample_Group != "NA"),]
+      
+      ### additional
+      # plot_df <- plot_df[union(which(plot_df$Sample_Group == "MSS_AA"),
+      #                          which(plot_df$Sample_Group == "MSS_CC")),]
       
       ### draw a plot with the data frame
       p[[i]] <- ggplot(plot_df, aes(x=Sample_Group, y=MCP_Counter_Score)) +
@@ -714,5 +723,8 @@ mcp_counter <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/share
   mcp_beeswarm("MSS_Race1_Distance")
   mcp_beeswarm("MSI_H_Race2_Distance")
   mcp_beeswarm("MSS_Race2_Distance")
+  mcp_beeswarm("Age")
+  mcp_beeswarm("Self_Reported_Race")
+  mcp_beeswarm("Predicted_Race")
   
 }

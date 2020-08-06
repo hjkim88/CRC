@@ -22,7 +22,7 @@
 #   Example
 #               > source("The_directory_of_RNASEQAnalysis5.R/RNASEQAnalysis5.R")
 #               > rnaseq_parvathi5(rCntPath = "./data/rnaseq/raw_count_tcga_coad_read.rda",
-#                                  clinInfoPath_640 = "./data/coadread_tcga_clinical_data_updated2.txt",
+#                                  clinInfoPath_640 = "./data/coadread_tcga_clinical_data_updated3.txt",
 #                                  padj_thres = 0.05,
 #                                  outputDir="./results/rnaseq/preprocessed_raw_counts3/")
 ###
@@ -40,7 +40,7 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
   if(!require(limma, quietly = TRUE)) {
     if(!requireNamespace("BiocManager", quietly = TRUE))
       install.packages("BiocManager")
-    BiocManager::install("limma", version = "3.8")
+    BiocManager::install("limma")
     require(limma, quietly = TRUE)
   }
   
@@ -141,7 +141,7 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
     }
     
     ### make a design matrix for DE analysis
-    sampleType <- as.character(grp)
+    sampleType <- as.factor(as.character(grp))
     
     if(is.null(bat_eff)) {
       Coldata <- data.frame(sampleType)
@@ -189,24 +189,50 @@ rnaseq_parvathi5 <- function(rCntPath = "//isilon.c2b2.columbia.edu/ifs/archive/
   }
   
   ### A function to print volcano plot of DE analysis with DESeq2 result
-  volPlotWithDeseq <- function(deresult, outputFilePath, pvalue=0.05) {
+  volPlotWithDeseq <- function(deresult, outputFilePath, pvalue=0.05, n=20) {
     
     ### load library
     if(!require(ggplot2)) {
       install.packages("ggplot2")
       library(ggplot2)
     }
+    if(!require(ggrepel, quietly = TRUE)) {
+      if(!requireNamespace("BiocManager", quietly = TRUE))
+        install.packages("BiocManager")
+      BiocManager::install("ggrepel")
+      require(ggrepel, quietly = TRUE)
+    }
     
     deresult$padj[which(is.na(deresult$padj))] <- 1
     volcanoData <- as.data.frame(cbind(deresult$log2FoldChange, -log10(deresult$padj), as.character(as.factor(deresult$padj < pvalue))))
     colnames(volcanoData) <- c("logFC", "logFDR", "Significance")
+    rownames(volcanoData) <- rownames(deresult)
     volcanoData$logFC <- as.numeric(as.character(volcanoData$logFC))
     volcanoData$logFDR <- as.numeric(as.character(volcanoData$logFDR))
+    volcanoData$Label <- ""
+    volcanoData$Color <- ""
+    
+    if(n > 0) {
+      for(i in 1:n) {
+        if(volcanoData$logFDR > -log10(pvalue) && volcanoData$logFC[i] >= 0) {
+          volcanoData$Label[i] <- rownames(volcanoData)[i]
+          volcanoData$Color[i] <- "red"
+        } else if(volcanoData$logFDR > -log10(pvalue) && volcanoData$logFC[i] < 0) {
+          volcanoData$Label[i] <- rownames(volcanoData)[i]
+          volcanoData$Color[i] <- "blue"
+        }
+      }
+    }
     
     s <- strsplit(outputFilePath, "/")
     f1 <- s[[1]][length(s[[1]])]
     
-    ggplot(data=volcanoData, aes(x=logFC, y=logFDR, colour=Significance)) + xlab("log2_Fold_Change") + ylab("-log10(FDR)") + ggtitle(paste("Significant (adj.p < ", pvalue, " ) DE genes -", sum(volcanoData$Significance == "TRUE"))) + theme_classic(base_size = 16) + geom_point(alpha=0.4)
+    ggplot(data=volcanoData, aes(x=logFC, y=logFDR, colour=Significance)) +
+      xlab("log2_Fold_Change") + ylab("-log10(FDR)") +
+      geom_point(aes(col = Significance), size = 1) +
+      geom_label_repel(aes(logFC, logFDR, label = Label), color = volcanoData$Color, box.padding = unit(0.45, "lines")) +
+      ggtitle(paste("Significant (adj.p < ", pvalue, " ) DE genes -", sum(volcanoData$Significance == "TRUE"))) +
+      theme_classic(base_size = 16) + geom_point(alpha=0.4)
     ggsave(filename = outputFilePath)
   }
   
