@@ -37,13 +37,13 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   if(!require(maftools, quietly = TRUE)) {
     if(!requireNamespace("BiocManager", quietly = TRUE))
       install.packages("BiocManager")
-    BiocManager::install("maftools", version = "3.8")
+    BiocManager::install("maftools")
     require(maftools, quietly = TRUE)
   }
   if(!require(org.Hs.eg.db, quietly = TRUE)) {
     if(!requireNamespace("BiocManager", quietly = TRUE))
       install.packages("BiocManager")
-    BiocManager::install("org.Hs.eg.db", version = "3.8")
+    BiocManager::install("org.Hs.eg.db")
     require(org.Hs.eg.db, quietly = TRUE)
   }
   if(!require(ggplot2, quietly = TRUE)) {
@@ -57,6 +57,16 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
   if(!require(ggpubr, quietly = TRUE)) {
     install.packages("ggpubr")
     require(ggpubr, quietly = TRUE)
+  }
+  if(!require(data.table, quietly = TRUE)) {
+    install.packages("data.table")
+    require(data.table, quietly = TRUE)
+  }
+  if(!require(qvalue, quietly = TRUE)) {
+    if(!requireNamespace("BiocManager", quietly = TRUE))
+      install.packages("BiocManager")
+    BiocManager::install("qvalue")
+    require(qvalue, quietly = TRUE)
   }
   
   ### load clinical info
@@ -605,6 +615,73 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
       mtext(fName, outer = TRUE, cex = 2)
       dev.off()
     }
+    
+    #
+    ### Mutation Frequency
+    #
+    
+    ### * SINCE ONE SAMPLE CAN HAVE MULTIPLE MUTATIONS IN ONE GENE,
+    ###   WE USED 'MutatedSamples' COLUMN HERE WHICH MEANS WE ONLY CONSIDERS ONE MUTATION PER ONE SAMPLE
+    
+    ### make an empty result data frame
+    shared_genes <- intersect(group1_maf@gene.summary$Hugo_Symbol, group2_maf@gene.summary$Hugo_Symbol)
+    mut_freq_mat <- matrix(NA, length(shared_genes), 7)
+    rownames(mut_freq_mat) <- shared_genes
+    colnames(mut_freq_mat) <- c(paste0(group1, "_", c("Mutation_Count", "Mutation_Frequency")),
+                                paste0(group2, "_", c("Mutation_Count", "Mutation_Frequency")),
+                                paste0("Odds_Ratio_(", group1, "/", group2, ")"),
+                                "P_Value", "Adjusted_P_Value")
+    mut_freq_mat <- data.frame(Gene_Symbol=shared_genes,
+                               mut_freq_mat,
+                               stringsAsFactors = FALSE, check.names = FALSE)
+    
+    ### fill out the data frame
+    group1_gene_summary <- setDF(group1_maf@gene.summary)
+    group2_gene_summary <- setDF(group2_maf@gene.summary)
+    rownames(group1_gene_summary) <- group1_gene_summary$Hugo_Symbol
+    rownames(group2_gene_summary) <- group2_gene_summary$Hugo_Symbol
+    mut_freq_mat[,paste0(group1, "_Mutation_Count")] <- group1_gene_summary[shared_genes,"MutatedSamples"]
+    mut_freq_mat[,paste0(group1, "_Mutation_Frequency")] <- round(mut_freq_mat[,paste0(group1, "_Mutation_Count")] * 100 / nrow(group1_maf@variants.per.sample), 2)
+    mut_freq_mat[,paste0(group2, "_Mutation_Count")] <- group2_gene_summary[shared_genes,"MutatedSamples"]
+    mut_freq_mat[,paste0(group2, "_Mutation_Frequency")] <- round(mut_freq_mat[,paste0(group2, "_Mutation_Count")] * 100 / nrow(group2_maf@variants.per.sample), 2)
+    
+    ### calculate p-value
+    ### Fisher's exact test
+    ###
+    ###               AA   CC
+    ###             ----------
+    ###    Mutation |  X    Y
+    ### No Mutation |  Z    W
+    
+    ### for each gene, calculate odds ratio and p-value
+    for(i in 1:nrow(mut_freq_mat)) {
+      ### set Fisher's exact test parameters
+      X <- mut_freq_mat$MSS_AA_Predicted_Mutation_Count[i]
+      Y <- mut_freq_mat$MSS_CC_Predicted_Mutation_Count[i]
+      Z <- nrow(group1_maf@variants.per.sample) - X
+      W <- nrow(group2_maf@variants.per.sample) - Y
+      
+      ### Fisher's exact test
+      fet <- fisher.test(matrix(c(X, Z, Y, W), 2, 2), alternative = "two.sided")
+      
+      ### fill out
+      mut_freq_mat$P_Value[i] <- fet$p.value
+      mut_freq_mat[i,paste0("Odds_Ratio_(", group1, "/", group2, ")")] <- fet$estimate
+    }
+    
+    ### add adjusted p-values
+    mut_freq_mat$Adjusted_P_Value <- p.adjust(mut_freq_mat$P_Value, method = "BH")
+    
+    ### order by adjusted p-value (increasing)
+    mut_freq_mat <- mut_freq_mat[order(mut_freq_mat$Adjusted_P_Value,
+                                       mut_freq_mat$P_Value),]
+    
+    ### write out the TMB table
+    outputDir2 <- paste0(outputDir, "Mutation_Frequency/")
+    dir.create(path = outputDir2, showWarnings = FALSE, recursive = TRUE)
+    write.xlsx2(mut_freq_mat,
+                file = paste0(outputDir2, "MF_Table_", group1, "_vs_", group2, ".xlsx"),
+                sheetName = "Mutation_Frequency", row.names = FALSE)
     
   }
   
