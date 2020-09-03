@@ -625,12 +625,12 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
     
     ### make an empty result data frame
     shared_genes <- intersect(group1_maf@gene.summary$Hugo_Symbol, group2_maf@gene.summary$Hugo_Symbol)
-    mut_freq_mat <- matrix(NA, length(shared_genes), 7)
+    mut_freq_mat <- matrix(NA, length(shared_genes), 8)
     rownames(mut_freq_mat) <- shared_genes
     colnames(mut_freq_mat) <- c(paste0(group1, "_", c("Mutation_Count", "Mutation_Frequency")),
                                 paste0(group2, "_", c("Mutation_Count", "Mutation_Frequency")),
                                 paste0("Odds_Ratio_(", group1, "/", group2, ")"),
-                                "P_Value", "Adjusted_P_Value")
+                                "P_Value", "Adjusted_P_Value", "95%_Confidence_Interval")
     mut_freq_mat <- data.frame(Gene_Symbol=shared_genes,
                                mut_freq_mat,
                                stringsAsFactors = FALSE, check.names = FALSE)
@@ -667,6 +667,7 @@ sm_analysis2 <- function(mafFilePath="//isilon.c2b2.columbia.edu/ifs/archive/sha
       ### fill out
       mut_freq_mat$P_Value[i] <- fet$p.value
       mut_freq_mat[i,paste0("Odds_Ratio_(", group1, "/", group2, ")")] <- fet$estimate
+      mut_freq_mat$`95%_Confidence_Interval`[i] <- paste0(round(fet$conf.int[1], 3), "-", round(fet$conf.int[2], 3))
     }
     
     ### add adjusted p-values
